@@ -1,7 +1,7 @@
 # main.py (Corrected relevant part)
 
 import time
-from faceRecognition import RealSenseFaceDetector as detector # Import the class
+from faceRecognition import RealSenseFaceDetector # Import the class
 
 if __name__ == "__main__":
     print("Main script started - Face Detection Pre-Check.")
@@ -12,8 +12,10 @@ if __name__ == "__main__":
 
     print(f"\nAttempting face detection pre-check (need {required_consistency}s consistency)...")
 
+    face_detector_object = RealSenseFaceDetector() # Using default width, height, fps
+
     # *** THIS IS THE CORRECT CALL ***
-    face_detected = detector.wait_for_consistent_face(duration=required_consistency)
+    face_detected = face_detector_object.wait_for_consistent_face(duration=required_consistency)
 
     # --- Proceed Based on Detection Result ---
     if face_detected:
