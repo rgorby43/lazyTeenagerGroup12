@@ -138,51 +138,71 @@ def speak(text):
 
 # --- INITIALIZATION FUNCTIONS ---
 
+# In lazy_teen_robot_integrated.py
 def init_realsense_camera():
     global pipeline
-    pipeline = rs.pipeline()
-    config = rs.config()
+    print("INIT_REALSENSE_CAMERA: Entered.")
     try:
-        print(f"Configuring RealSense: {WIDTH}x{HEIGHT} @ {FPS} FPS")
+        print("INIT_REALSENSE_CAMERA: Attempting to create rs.pipeline().")
+        pipeline = rs.pipeline()  # pipeline is assigned an object
+        print(
+            f"INIT_REALSENSE_CAMERA: rs.pipeline() created. Global pipeline is now type: {type(pipeline)}, id: {id(pipeline)}")
+
+        config = rs.config()
+        print(f"INIT_REALSENSE_CAMERA: Configuring stream {WIDTH}x{HEIGHT} @ {FPS} FPS.")
         config.enable_stream(rs.stream.color, WIDTH, HEIGHT, rs.format.bgr8, FPS)
-        # config.enable_stream(rs.stream.depth, WIDTH, HEIGHT, rs.format.z16, FPS) # If depth is needed later
-        profile = pipeline.start(config)
+
+        print("INIT_REALSENSE_CAMERA: Attempting pipeline.start(config).")
+        profile = pipeline.start(config)  # If this fails, exception is caught
         device = profile.get_device()
-        print(f"RealSense camera started. Connected to: {device.get_info(rs.camera_info.name)}")
-        # Allow sensor to auto-exposure, etc.
-        time.sleep(1)  # Wait for frames to stabilize
-        return True
+        print(
+            f"INIT_REALSENSE_CAMERA: SUCCESS - RealSense camera started. Connected to: {device.get_info(rs.camera_info.name)}.")
+        print(
+            f"INIT_REALSENSE_CAMERA: Global pipeline id: {id(pipeline)} is active: {pipeline.get_active_profile() is not None}.")
+        time.sleep(1)
+        print("INIT_REALSENSE_CAMERA: Returning True.")
+        return True  # Success
     except RuntimeError as e:
-        speak(f"Ugh, my eyes are messed up. RealSense error: {e}")
+        speak(f"Ugh, my eyes are messed up. RealSense error in init_realsense_camera: {e}")
+        print(f"INIT_REALSENSE_CAMERA: RuntimeError. Global pipeline id: {id(pipeline)}, value: {pipeline}.")
+        # pipeline might be an unstarted rs.pipeline object here, or None if rs.pipeline() itself failed
+        print("INIT_REALSENSE_CAMERA: Returning False due to RuntimeError.")
+        return False
+    except Exception as e:  # Catch any other unexpected error
+        speak(f"Unexpected error in init_realsense_camera: {e}")
+        print(
+            f"INIT_REALSENSE_CAMERA: Unexpected error. Global pipeline (before error) id: {id(pipeline if 'pipeline' in locals() or 'pipeline' in globals() else None)}.")
+        pipeline = None  # Ensure pipeline is None if there was a catastrophic failure before assignment
+        print("INIT_REALSENSE_CAMERA: Returning False due to unexpected error.")
         return False
 
 # In lazy_teen_robot_integrated.py
+# In lazy_teen_robot_integrated.py
 def init_face_detector():
-    global face_detector_instance, WIDTH, HEIGHT, FPS, pipeline # ADD `pipeline` here
-    print(f"INIT_FACE_DETECTOR: Entered. Current face_detector_instance id: {id(face_detector_instance)}")
-    if face_detector_instance is None: # Only create if not already created
+    global face_detector_instance, WIDTH, HEIGHT, FPS, pipeline
+    print(f"INIT_FACE_DETECTOR: Entered.")
+    print(f"INIT_FACE_DETECTOR: Global 'pipeline' received is type: {type(pipeline)}, id: {id(pipeline)}, value: {pipeline}")
+
+    if face_detector_instance is None:
         try:
-            print("Creating RealSenseFaceDetector instance...")
-
-            # Ensure the global pipeline (for the main script) is available.
-            # init_realsense_camera() should have been called before this.
-            if not pipeline:
-                print("CRITICAL ERROR: Main RealSense pipeline not initialized before creating Face Detector.")
-                speak("My main eyes aren't working, so I can't even try to look for faces.")
-                return False
-
-            # Pass the global `pipeline` to the RealSenseFaceDetector constructor
+            print("INIT_FACE_DETECTOR: Attempting to create RealSenseFaceDetector instance...")
             face_detector_instance = RealSenseFaceDetector(
                 width=WIDTH,
                 height=HEIGHT,
                 fps=FPS,
-                external_pipeline=pipeline  # <--- PASSES THE MAIN PIPELINE
+                external_pipeline=pipeline  # Pass the global pipeline
             )
-            print("RealSenseFaceDetector instance created and configured with main pipeline.")
+            print(f"INIT_FACE_DETECTOR: Instance CREATED. New face_detector_instance id: {id(face_detector_instance)}")
         except Exception as e:
-            speak(f"Failed to create RealSenseFaceDetector instance: {e}")
+            # This is where the "unexpected keyword argument 'external_pipeline'" would have been caught if your
+            # faceRecognition.py __init__ wasn't updated.
+            speak(f"INIT_FACE_DETECTOR: FAILED to create RealSenseFaceDetector instance: {e}")
+            print(f"INIT_FACE_DETECTOR: Error during creation. face_detector_instance id: {id(face_detector_instance)}")
             return False
+    # ... (rest of the function as before) ...
+    print(f"INIT_FACE_DETECTOR: Exiting successfully. Final face_detector_instance id: {id(face_detector_instance)}")
     return True
+
 
 def init_object_recognizer():
     global orb_detector, bf_matcher, trained_objects_data
@@ -577,10 +597,10 @@ def run_robot_room_cleaner_demo():
     # This part should run first to ensure the robot is ready
     speak("Ugh, guess I have to wake up now...")
     if not init_realsense_camera() or \
-            not init_face_detector() or \
+            not init_object_recognizer() or \
             not init_aruco_detection_system() or \
             not init_maestro_servo_controller() or \
-            not init_object_recognizer():  # Ensure face detector is also initialized here
+            not init_face_detector():  # Ensure face detector is also initialized here
         speak("Something important didn't start. I'm going back to 'sleep'. Problem solved.")
         # Clean up any partial initializations
         if pipeline: pipeline.stop()

@@ -53,7 +53,7 @@ class RealSenseFaceDetector:
             return False
 
     def _initialize_realsense(self):
-        print(f"RFS_FD _initialize_realsense: Called for instance {id(self)}.")
+        print("RFS_FD _initialize_realsense: Called for instance {id(self)}.")
         if self._using_external_pipeline and self.pipeline:
             print(f"RFS_FD _initialize_realsense: Using external pipeline id {id(self.pipeline)}.")
             try:
