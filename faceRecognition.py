@@ -22,6 +22,7 @@ class RealSenseFaceDetector:
         self.window_name = "Face Detection - Waiting..."
 
         print("RealSenseFaceDetector initialized for waiting.")
+        print("DEBUG: LOADING faceRecognition.py - VERSION 3.0Z (e.g., May 6th version)")
 
     # --- Initialization Methods (_initialize_cascade, _initialize_realsense) ---
     # Keep these exactly the same as in the previous version
