@@ -116,6 +116,7 @@ aruco_detector_instance = None  # Renamed from 'detector' to avoid clash
 maestro_controller = None
 camera_matrix = None  # Renamed from 'mtx'
 distortion_coeffs = None  # Renamed from 'dist'
+face_detector_instance = None # <--- Make sure this line is present
 
 
 # --- HELPER: TEXT-TO-SPEECH (Placeholder) ---
@@ -133,6 +134,7 @@ def speak(text):
 
 
 # --- INITIALIZATION FUNCTIONS ---
+
 def init_realsense_camera():
     global pipeline
     pipeline = rs.pipeline()
@@ -151,7 +153,32 @@ def init_realsense_camera():
         speak(f"Ugh, my eyes are messed up. RealSense error: {e}")
         return False
 
+# In lazy_teen_robot_integrated.py
+def init_face_detector():
+    global face_detector_instance, WIDTH, HEIGHT, FPS, pipeline # ADD `pipeline` here
+    if face_detector_instance is None: # Only create if not already created
+        try:
+            print("Creating RealSenseFaceDetector instance...")
 
+            # Ensure the global pipeline (for the main script) is available.
+            # init_realsense_camera() should have been called before this.
+            if not pipeline:
+                print("CRITICAL ERROR: Main RealSense pipeline not initialized before creating Face Detector.")
+                speak("My main eyes aren't working, so I can't even try to look for faces.")
+                return False
+
+            # Pass the global `pipeline` to the RealSenseFaceDetector constructor
+            face_detector_instance = RealSenseFaceDetector(
+                width=WIDTH,
+                height=HEIGHT,
+                fps=FPS,
+                external_pipeline=pipeline  # <--- PASSES THE MAIN PIPELINE
+            )
+            print("RealSenseFaceDetector instance created and configured with main pipeline.")
+        except Exception as e:
+            speak(f"Failed to create RealSenseFaceDetector instance: {e}")
+            return False
+    return True
 def init_object_recognizer():
     global orb_detector, bf_matcher, trained_objects_data
     orb_detector = cv2.ORB_create(nfeatures=ORB_FEATURES)
