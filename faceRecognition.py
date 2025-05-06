@@ -8,21 +8,30 @@ import os
 import threading
 
 class RealSenseFaceDetector:
-    def __init__(self, width=640, height=480, fps=30):
+    def __init__(self, width=640, height=480, fps=30, external_pipeline=None): # ADD external_pipeline
+        print(f"RFS_FD __init__: Instance {id(self)} creation started.") # Your debug print
         self.width = width
         self.height = height
         self.fps = fps
 
-        self.pipeline = None
-        self.face_cascade = None
-        self._is_running = False # Internal flag for loop control
-        self._detection_thread = None
-        self._detection_successful = False # Flag to store the outcome
-        self._required_duration = 1 # Default, can be overridden
-        self.window_name = "Face Detection - Waiting..."
+        self.pipeline = external_pipeline # Use the external one if provided
+        self._using_external_pipeline = (external_pipeline is not None) # Flag
 
-        print("RealSenseFaceDetector initialized for waiting.")
-        print("DEBUG: LOADING faceRecognition.py - VERSION 3.0Z (e.g., May 6th version)")
+        # Add your debug print here if you had one for self.pipeline assignment
+        if self._using_external_pipeline:
+            print(f"RFS_FD __init__: Instance {id(self)} using EXTERNAL pipeline id {id(self.pipeline)}.")
+        else:
+            print(f"RFS_FD __init__: Instance {id(self)} will manage INTERNAL pipeline (initially None).")
+            # self.pipeline is already None if external_pipeline was None, so this is fine.
+
+        self.face_cascade = None
+        self._is_running = False
+        self._detection_thread = None
+        self._detection_successful = False
+        self._required_duration = 1
+        self.window_name = "Face Detection - Waiting..."
+        print(f"RFS_FD __init__: Instance {id(self)} basic attributes set.")
+
 
     # --- Initialization Methods (_initialize_cascade, _initialize_realsense) ---
     # Keep these exactly the same as in the previous version
@@ -44,24 +53,41 @@ class RealSenseFaceDetector:
             return False
 
     def _initialize_realsense(self):
-        # ... (same code as before) ...
+        print(f"RFS_FD _initialize_realsense: Called for instance {id(self)}.")
+        if self._using_external_pipeline and self.pipeline:
+            print(f"RFS_FD _initialize_realsense: Using external pipeline id {id(self.pipeline)}.")
+            try:
+                if self.pipeline.get_active_profile():
+                    print("RFS_FD _initialize_realsense: External pipeline is already active.")
+                    return True
+                else:
+                    print("RFS_FD _initialize_realsense: WARNING - External pipeline provided but not active. Assuming caller will start it.")
+                    return True
+            except RuntimeError:
+                 print("RFS_FD _initialize_realsense: Error checking external pipeline status (likely not started). Assuming caller manages.")
+                 return True
+
+        print(f"RFS_FD _initialize_realsense: Initializing internal pipeline for instance {id(self)}.")
+        # ... (Your existing code for creating and starting an internal self.pipeline)
         try:
             self.pipeline = rs.pipeline()
             config = rs.config()
-            ctx = rs.context()
+            ctx = rs.context() # Not strictly needed if just enabling stream
             devices = ctx.query_devices()
             if len(devices) == 0:
-                print("No RealSense devices connected.")
+                print("RFS_FD _initialize_realsense: No RealSense devices connected (internal init).")
                 return False
-
-            print(f"Configuring RealSense stream: {self.width}x{self.height} @ {self.fps} FPS")
             config.enable_stream(rs.stream.color, self.width, self.height, rs.format.bgr8, self.fps)
-
-            profile = self.pipeline.start(config)
-            print("RealSense stream started.")
-            device = profile.get_device()
-            print(f"Connected to: {device.get_info(rs.camera_info.name)}")
+            self.pipeline.start(config)
+            print(f"RFS_FD _initialize_realsense: Internal pipeline id {id(self.pipeline)} started.")
             return True
+        except Exception as e:
+            print(f"RFS_FD _initialize_realsense: FAILED for instance {id(self)}: {e}")
+            if self.pipeline: # Attempt to stop if partially started
+                try: self.pipeline.stop()
+                except: pass
+            self.pipeline = None
+            return False
 
         except RuntimeError as e:
             print(f"Error initializing RealSense: {e}")
@@ -243,28 +269,29 @@ class RealSenseFaceDetector:
         return self._detection_successful
 
     def _cleanup_resources(self):
-        """Stops pipeline and cleans up OpenCV windows."""
-        print("DEBUG: MODULE - Cleaning up resources...")
-        if self.pipeline:
+        print(f"RFS_FD _cleanup_resources: Called for instance {id(self)}.")  # Your debug print
+        # Only stop the pipeline if it was internally managed AND it exists
+        if not self._using_external_pipeline and self.pipeline:
+            print(f"RFS_FD _cleanup_resources: Attempting to stop internally managed pipeline id {id(self.pipeline)}.")
             try:
-                active_profile = self.pipeline.get_active_profile()
-                if active_profile:
-                    print("Stopping RealSense pipeline...")
+                if self.pipeline.get_active_profile():
                     self.pipeline.stop()
-                    print("RealSense pipeline stopped.")
-                else:
-                    print("RealSense pipeline was not active or already stopped.")
-            except Exception as e:
-                print(f"Error stopping RealSense (may be normal if already stopped): {e}")
+                    print("RFS_FD _cleanup_resources: Internally managed pipeline stopped.")
+            except RuntimeError as e:
+                print(f"RFS_FD _cleanup_resources: Error stopping internal pipeline (may be normal): {e}")
             finally:
-                self.pipeline = None # Ensure reset
+                self.pipeline = None  # Clear reference to internal pipeline
+        elif self._using_external_pipeline:
+            print(
+                f"RFS_FD _cleanup_resources: Was using external pipeline. Not stopping it. External pipeline ref for this instance was to id {id(self.pipeline)}.")
+            # DO NOT set self.pipeline = None here if it's external, the owner manages it.
+            # The reference in this instance will just go away when the instance is destroyed.
 
-        # Ensure all windows are closed, even if thread had issues
         try:
-            cv2.destroyAllWindows()
+            cv2.destroyWindow(self.window_name)
             cv2.waitKey(1)
         except Exception:
-            pass # Ignore errors during final cleanup
+            pass  # Ignore errors during final cleanup of windows
 
     def __del__(self):
         """Destructor attempts cleanup."""

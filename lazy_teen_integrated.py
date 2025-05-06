@@ -116,7 +116,8 @@ aruco_detector_instance = None  # Renamed from 'detector' to avoid clash
 maestro_controller = None
 camera_matrix = None  # Renamed from 'mtx'
 distortion_coeffs = None  # Renamed from 'dist'
-face_detector_instance = None # <--- Make sure this line is present
+face_detector_instance = RealSenseFaceDetector(
+    width=WIDTH, height=HEIGHT, fps=FPS, external_pipeline=pipeline)
 print(f"MODULE LEVEL: Initial face_detector_instance. Current id: {id(face_detector_instance)}")
 
 
