@@ -116,8 +116,7 @@ aruco_detector_instance = None  # Renamed from 'detector' to avoid clash
 maestro_controller = None
 camera_matrix = None  # Renamed from 'mtx'
 distortion_coeffs = None  # Renamed from 'dist'
-face_detector_instance = RealSenseFaceDetector(
-    width=WIDTH, height=HEIGHT, fps=FPS, external_pipeline=pipeline)
+face_detector_instance = None
 print(f"MODULE LEVEL: Initial face_detector_instance. Current id: {id(face_detector_instance)}")
 
 
@@ -177,29 +176,36 @@ def init_realsense_camera():
         return False
 
 # In lazy_teen_robot_integrated.py
-# In lazy_teen_robot_integrated.py
 def init_face_detector():
     global face_detector_instance, WIDTH, HEIGHT, FPS, pipeline
     print(f"INIT_FACE_DETECTOR: Entered.")
     print(f"INIT_FACE_DETECTOR: Global 'pipeline' received is type: {type(pipeline)}, id: {id(pipeline)}, value: {pipeline}")
+    # This print below will tell us if the global face_detector_instance was None as expected
+    print(f"INIT_FACE_DETECTOR: Current face_detector_instance before 'if' check - type: {type(face_detector_instance)}, id: {id(face_detector_instance)}")
 
     if face_detector_instance is None:
         try:
-            print("INIT_FACE_DETECTOR: Attempting to create RealSenseFaceDetector instance...")
+            print("INIT_FACE_DETECTOR: face_detector_instance is None. Attempting to create new instance...")
+            # This assumes your faceRecognition.py __init__ ACCEPTS external_pipeline
             face_detector_instance = RealSenseFaceDetector(
                 width=WIDTH,
                 height=HEIGHT,
                 fps=FPS,
-                external_pipeline=pipeline  # Pass the global pipeline
+                external_pipeline=pipeline
             )
             print(f"INIT_FACE_DETECTOR: Instance CREATED. New face_detector_instance id: {id(face_detector_instance)}")
         except Exception as e:
-            # This is where the "unexpected keyword argument 'external_pipeline'" would have been caught if your
-            # faceRecognition.py __init__ wasn't updated.
             speak(f"INIT_FACE_DETECTOR: FAILED to create RealSenseFaceDetector instance: {e}")
-            print(f"INIT_FACE_DETECTOR: Error during creation. face_detector_instance id: {id(face_detector_instance)}")
+            print(f"INIT_FACE_DETECTOR: Error during creation. face_detector_instance id is now: {id(face_detector_instance)}")
             return False
-    # ... (rest of the function as before) ...
+    else:
+        # This case should ideally not happen if we want a fresh init each time or controlled re-init
+        print(f"INIT_FACE_DETECTOR: Instance already exists. Using existing id: {id(face_detector_instance)}. This might be unexpected if a fresh init was desired.")
+
+    if face_detector_instance is None: # Should only be true if creation failed AND face_detector_instance wasn't assigned
+        print("INIT_FACE_DETECTOR: Exiting, face_detector_instance is STILL None after attempt. This is a problem.")
+        return False
+
     print(f"INIT_FACE_DETECTOR: Exiting successfully. Final face_detector_instance id: {id(face_detector_instance)}")
     return True
 
