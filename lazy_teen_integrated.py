@@ -117,6 +117,8 @@ maestro_controller = None
 camera_matrix = None  # Renamed from 'mtx'
 distortion_coeffs = None  # Renamed from 'dist'
 face_detector_instance = None # <--- Make sure this line is present
+print(f"MODULE LEVEL: Initial face_detector_instance. Current id: {id(face_detector_instance)}")
+
 
 
 # --- HELPER: TEXT-TO-SPEECH (Placeholder) ---
@@ -156,6 +158,7 @@ def init_realsense_camera():
 # In lazy_teen_robot_integrated.py
 def init_face_detector():
     global face_detector_instance, WIDTH, HEIGHT, FPS, pipeline # ADD `pipeline` here
+    print(f"INIT_FACE_DETECTOR: Entered. Current face_detector_instance id: {id(face_detector_instance)}")
     if face_detector_instance is None: # Only create if not already created
         try:
             print("Creating RealSenseFaceDetector instance...")
