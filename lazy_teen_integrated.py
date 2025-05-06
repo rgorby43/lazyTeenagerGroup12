@@ -87,7 +87,7 @@ TRAINED_OBJECTS_FILE = 'trainedObjects.pkl'  #
 # ArUco (from your lazy_teen.py and project doc)
 ARUCO_DICT_NAME = aruco.DICT_4X4_50  # (Implied by IDs 0-4)
 MARKER_SIZE_METERS = 0.1905  # IMPORTANT: From your code. MUST BE ACCURATE for pose.
-CALIBRATION_FILE = 'home/group12/realsense_calibration_data.npz'
+CALIBRATION_FILE = '/home/group12/realsense_calibration_data.npz'
 MARKER_ID_CENTER = 0  #
 # Maestro Servos (from your lazy_teen.py)
 MAESTRO_PORT = '/dev/ttyACM0'  # Update if necessary
