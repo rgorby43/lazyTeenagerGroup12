@@ -645,7 +645,6 @@ def run_robot_room_cleaner_demo():
 
 
 if __name__ == "__main__":
-    print("== LAZY TEENAGER ROBOT CLEANER - CSCI 442 FINAL PROJECT ==")
     print("Ensure:")
     print("  1. RealSense camera is connected.")
     print(f"  2. Trained objects file ('{TRAINED_OBJECTS_FILE}') exists.")
