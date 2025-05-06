@@ -577,10 +577,10 @@ def run_robot_room_cleaner_demo():
     # This part should run first to ensure the robot is ready
     speak("Ugh, guess I have to wake up now...")
     if not init_realsense_camera() or \
-            not init_object_recognizer() or \
+            not init_face_detector() or \
             not init_aruco_detection_system() or \
             not init_maestro_servo_controller() or \
-            not init_face_detector():  # Ensure face detector is also initialized here
+            not init_object_recognizer():  # Ensure face detector is also initialized here
         speak("Something important didn't start. I'm going back to 'sleep'. Problem solved.")
         # Clean up any partial initializations
         if pipeline: pipeline.stop()
