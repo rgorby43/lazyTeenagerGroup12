@@ -179,6 +179,7 @@ def init_face_detector():
             speak(f"Failed to create RealSenseFaceDetector instance: {e}")
             return False
     return True
+
 def init_object_recognizer():
     global orb_detector, bf_matcher, trained_objects_data
     orb_detector = cv2.ORB_create(nfeatures=ORB_FEATURES)
@@ -333,23 +334,25 @@ def reset_robot_to_neutral_stance():
 
 # --- COMPUTER VISION AND ROBOT LOGIC FUNCTIONS ---
 def wait_for_human_face_trigger(display=True):
-    global pipeline
+    global face_detector_instance  # Use the global instance
+
+    if not face_detector_instance:
+        speak("Face detector was not initialized. Major oops.")
+        return False
+
     speak("Ugh. Is someone there? Show your face or whatever.")
-    # Assuming RealSenseFaceDetector.wait_for_consistent_face is a static method
-    # It might need the pipeline object if it doesn't manage its own.
-    face_found = RealSenseFaceDetector.wait_for_consistent_face(
-        duration=FACE_DETECTION_DURATION,
-        pipeline_object=pipeline,  # Pass pipeline if needed by your detector
-        face_size_threshold=MIN_FACE_SIZE,  # Pass size if supported
-        display=display
+
+    # Call the method ON THE INSTANCE, and ONLY pass 'duration'
+    face_found = face_detector_instance.wait_for_consistent_face(
+        duration=FACE_DETECTION_DURATION
     )
+
     if face_found:
-        speak("Ugh. What now?")  # [cite: 18]
+        speak("Ugh. What now?")
         return True
     else:
         speak("No face? Fine, I'm going back to ignoring everything.")
         return False
-
 
 def identify_object_in_view(timeout_sec=15, display=True):  # [cite: 21, 22]
     global pipeline, orb_detector, bf_matcher, trained_objects_data
