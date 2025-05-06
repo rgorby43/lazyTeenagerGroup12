@@ -9,7 +9,7 @@ import time
 import pyrealsense2 as rs
 import cv2.aruco as aruco
 
-from maestro import Controller  # Ensure this file is named controller.py or update import
+from controller import Controller  # Ensure this file is named controller.py or update import
 from faceRecognition import RealSenseFaceDetector as detector # Import the class
 # --- DUMMY CLASSES/FUNCTIONS (Replace with your actual imports if these cause issues) ---
 # This is to allow the rest of the script to be structured and runnable for review.
