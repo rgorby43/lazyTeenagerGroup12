@@ -1,6 +1,6 @@
 # lazy_teen_robot_integrated.py
 import sys
-sys.path.append('/home/group12/maestro')
+sys.path.append('/home/group12/')
 # --- IMPORTS ---
 import cv2
 import pickle
@@ -9,7 +9,7 @@ import time
 import pyrealsense2 as rs
 import cv2.aruco as aruco
 
-from controller import Controller  # Ensure this file is named controller.py or update import
+from maestro import Controller  # Ensure this file is named controller.py or update import
 from faceRecognition import RealSenseFaceDetector as detector # Import the class
 # --- DUMMY CLASSES/FUNCTIONS (Replace with your actual imports if these cause issues) ---
 # This is to allow the rest of the script to be structured and runnable for review.
@@ -87,7 +87,7 @@ TRAINED_OBJECTS_FILE = 'trainedObjects.pkl'  #
 # ArUco (from your lazy_teen.py and project doc)
 ARUCO_DICT_NAME = aruco.DICT_4X4_50  # (Implied by IDs 0-4)
 MARKER_SIZE_METERS = 0.1905  # IMPORTANT: From your code. MUST BE ACCURATE for pose.
-CALIBRATION_FILE = 'realsense_calibration_data.npz'
+CALIBRATION_FILE = 'home/group12/realsense_calibration_data.npz'
 MARKER_ID_CENTER = 0  #
 # Maestro Servos (from your lazy_teen.py)
 MAESTRO_PORT = '/dev/ttyACM0'  # Update if necessary
