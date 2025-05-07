@@ -244,7 +244,7 @@ def find_markers(frame, target_id):
     corners, ids, _ = cv2.aruco.detectMarkers(frame, aruco_dict, parameters=parameters)
 
     if (target_id == 0):
-
+        print("checking for 0")
     if ids is not None:
         ids = ids.flatten()
         if target_id in ids:
