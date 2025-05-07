@@ -487,6 +487,27 @@ def _execute_timed_movement_in_thread(movement_function_to_call, movement_durati
     finally:
         _movement_thread_active_flag.clear() # Signal that movement is complete
 
+def start_non_blocking_timed_movement(movement_function_ref, duration_sec, *args_for_movement):
+    global movement_thread, _movement_thread_active_flag
+
+    if _movement_thread_active_flag.is_set():
+        # print("DEBUG: A non-blocking movement is already active. Skipping new request.")
+        return False # Indicate movement was not started because one is already in progress
+
+    _movement_thread_active_flag.set() # Signal that a movement is now starting/active
+
+    # Clean up any previous thread object if it's finished
+    if movement_thread and not movement_thread.is_alive():
+        movement_thread.join() # Ensure resources are released
+
+    movement_thread = threading.Thread(
+        target=_execute_timed_movement_in_thread,
+        args=(movement_function_ref, duration_sec, *args_for_movement)
+    )
+    movement_thread.daemon = True # Allows the main program to exit even if this thread is running
+    movement_thread.start()
+    # print(f"MAIN: Started non-blocking movement: {movement_function_ref.__name__} for {duration_sec}s")
+    return True # Indicate movement was successfully started
 
 def navigate_to_aruco_marker(target_id, display=True):
     global pipeline, aruco_detector_instance, camera_matrix, distortion_coeffs
