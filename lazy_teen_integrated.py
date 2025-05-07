@@ -706,7 +706,7 @@ def run_robot_room_cleaner_demo():
         print("DEBUG: Returned from wait_for_human_face_trigger.")
         print("DEBUG: MAIN THREAD - Attempting to destroy ALL OpenCV windows.")
         cv2.destroyAllWindows()
-        cv2.waitKey(50)
+        cv2.waitKey(500)
         # 2. Ask for the Object & 3. Identify the Object
         object_name, target_aruco_id_for_drop = identify_object_in_view(timeout_sec=20, display=True)
 
