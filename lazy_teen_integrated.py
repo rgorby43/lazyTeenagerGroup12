@@ -393,8 +393,13 @@ def identify_object_in_view(timeout_sec=15, display=True):  #
     window_name = "Object Recognition"
     if display:
         print("DEBUG: Creating OpenCV window: ", window_name)
-        #cv2.namedWindow(window_name, cv2.WINDOW_AUTOSIZE)
-        print(f"DEBUG: OpenCV window '{window_name}' call returned.") # <-- ADD THIS LINE
+        try:
+            cv2.namedWindow(self.window_name, cv2.WINDOW_AUTOSIZE)
+            print(f"DEBUG: MODULE - Window created. Waiting for {self._required_duration}s consistency...")
+        except Exception as e:
+            print(f"DEBUG: MODULE - FAILED TO CREATE WINDOW: {e}")
+            self._is_running = False # Stop if window fails
+            return        print(f"DEBUG: OpenCV window '{window_name}' call returned.") # <-- ADD THIS LINE
 
     start_time = time.time()
     best_obj_name, best_obj_id = None, None
