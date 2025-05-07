@@ -723,105 +723,81 @@ def navigate_to_aruco_marker(target_id, display=True):  # [cite: 26, 27, 28]
 
 # --- MAIN APPLICATION SCRIPT ---
 def run_robot_room_cleaner_demo():
-    global pipeline, face_detector_instance, maestro_controller # Make sure all globals that are modified are listed
+    global pipeline  # Ensure it's accessible for cleanup
 
     # --- Initialization Phase ---
+    # This part should run first to ensure the robot is ready
     speak("Ugh, guess I have to wake up now...")
-    # Initial set of initializations
     if not init_realsense_camera() or \
             not init_object_recognizer() or \
             not init_aruco_detection_system() or \
             not init_maestro_servo_controller() or \
-            not init_face_detector(): # First time initializing the face detector
+            not init_face_detector():  # Ensure face detector is also initialized here
         speak("Something important didn't start. I'm going back to 'sleep'. Problem solved.")
-        if pipeline: shutdown_realsense_camera() # Use the new shutdown
+        # Clean up any partial initializations
+        if pipeline: pipeline.stop()
         if maestro_controller: maestro_controller.close()
         cv2.destroyAllWindows()
         return
 
-    reset_robot_to_neutral_stance()
+    reset_robot_to_neutral_stance()  # Start from a known configuration
 
     # --- Phase 2: Room Cleaner Demo Protocol ---
-    if wait_for_human_face_trigger(display=True):
-        print("DEBUG: Main script - Returned from wait_for_human_face_trigger.")
-        print("DEBUG: Main script - Calling cv2.destroyAllWindows() with a longer wait.")
+    # 1. Wait for a Human Face
+    if wait_for_human_face_trigger(display=True):  # If face IS detected
+        # The "Ugh. What now?" is already spoken by wait_for_human_face_trigger on success
+        print("DEBUG: Returned from wait_for_human_face_trigger.")
+        print("DEBUG: MAIN THREAD - Attempting to destroy ALL OpenCV windows.")
         cv2.destroyAllWindows()
-        cv2.waitKey(500) # Increased wait time
-
-        print("DEBUG: Main script - SHUTTING DOWN RealSense camera pipeline.")
-        shutdown_realsense_camera() # Stop the global pipeline
-        print("DEBUG: Main script - RealSense camera pipeline shut down procedure complete.")
-
-        # Important: Nullify the face_detector_instance.
-        # This forces init_face_detector to create a new one, which will then
-        # pick up the new global 'pipeline' object after the camera restarts.
-        print("DEBUG: Main script - Nullifying face_detector_instance to force recreation.")
-        if face_detector_instance:
-            # If your RealSenseFaceDetector class has a specific method to release its
-            # own non-pipeline resources (e.g., Haar cascade), you could call it here.
-            # Example: if hasattr(face_detector_instance, 'release_haar_cascade'):
-            #              face_detector_instance.release_haar_cascade()
-            face_detector_instance = None # This is key for the re-initialization logic
-
-        print("DEBUG: Main script - RE-INITIALIZING RealSense camera pipeline.")
-        if not init_realsense_camera(): # This will create a new global 'pipeline' object
-            speak("My eyes are *still* messed up after trying to restart them. I give up on this task.")
-            # Attempt to clean up and exit gracefully
-            reset_robot_to_neutral_stance()
-            speak("Shutting down because camera restart failed.")
-            if maestro_controller: maestro_controller.close()
-            cv2.destroyAllWindows()
-            return
-        else:
-            print("DEBUG: Main script - RealSense camera pipeline RE-INITIALIZED successfully.")
-
-        print("DEBUG: Main script - RE-INITIALIZING Face Detector with the new pipeline.")
-        # Now call init_face_detector. Since face_detector_instance is None,
-        # it will create a new instance, which will use the new global 'pipeline'.
-        if not init_face_detector(): # Default force_recreate=False is fine here due to prior nullification
-            speak("Could not get the face detector working with the restarted camera. System is goofed.")
-            reset_robot_to_neutral_stance()
-            speak("Shutting down because face detector re-init failed.")
-            shutdown_realsense_camera()
-            if maestro_controller: maestro_controller.close()
-            cv2.destroyAllWindows()
-            return
-        else:
-            print("DEBUG: Main script - Face Detector RE-INITIALIZED successfully.")
-
-        # Now, the global 'pipeline' should be fresh and active.
-        # identify_object_in_view uses the global 'pipeline' directly.
+        cv2.waitKey(500)
+        # 2. Ask for the Object & 3. Identify the Object
         object_name, target_aruco_id_for_drop = identify_object_in_view(timeout_sec=20, display=True)
+
         print("DEBUG: MAIN THREAD - post object detect call")
 
         if object_name and target_aruco_id_for_drop is not None:
+            # 4. Wait for the Ring Ritual (Raise arm)
             perform_arm_raise_for_ritual()
+
+            # 5. Find Correct ArUco Marker & 6. Move to Marker/Box
             if navigate_to_aruco_marker(target_aruco_id_for_drop, display=True):
+                # (Verbal announcement about arrival is handled within navigate_to_aruco_marker if successful)
+                # 6. Drop the Ring
                 perform_ring_drop()
             else:
                 speak(
                     f"Couldn't make it to marker {target_aruco_id_for_drop}. So, this thing stays with me. Your problem.")
-        else:
+        else:  # Object not identified or user quit
             speak("Didn't get an object to clean. So, I'm, like, done here.")
 
+        # 7. Return to Start (Marker 0) - This now only happens if a face was detected and chore sequence was attempted
         speak("Alright, time to go back to doing nothing at the starting spot.")
         if navigate_to_aruco_marker(MARKER_ID_CENTER, display=True):
             speak("Made it back to the center. Nap time.")
         else:
             speak("Eh, couldn't find the exact center. This is good enough.")
-        speak("Cleaning complete. Barely.")
 
-    else: # Face not detected
-        pass # Message already handled by wait_for_human_face_trigger
+        speak("Cleaning complete. Barely.")  # This message now makes more sense here
 
-    # --- Final Cleanup ---
-    reset_robot_to_neutral_stance()
-    speak("Shutting down. Finally some peace.")
-    shutdown_realsense_camera() # Ensure pipeline is stopped at the very end
+    else:  # Face was NOT detected by wait_for_human_face_trigger
+        # The "No one around to boss me?..." message is already spoken by wait_for_human_face_trigger on failure
+        # No chore sequence, no specific "Return to Start" for the chore is needed.
+        # The robot will just proceed to the final reset and cleanup.
+        pass  # Message already handled by wait_for_human_face_trigger
+
+    # This final reset and cleanup should happen regardless of face detection success,
+    # to ensure the robot is left in a safe state and resources are freed.
+    reset_robot_to_neutral_stance()  # Ensure it's neutral at the very end.
+
+    # --- Cleanup ---
+    speak("Shutting down. Finally some peace.")  # General shutdown message
+    if pipeline:
+        print("Stopping RealSense pipeline...")
+        pipeline.stop()
     if maestro_controller:
         print("Closing Maestro controller connection...")
         maestro_controller.close()
-    cv2.destroyAllWindows() # Final destroy all windows
+    cv2.destroyAllWindows()
     print("All windows closed. Robot script finished.")
 
 
