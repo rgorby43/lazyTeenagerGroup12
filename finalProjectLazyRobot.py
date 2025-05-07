@@ -33,7 +33,7 @@ BACKWARD = 7000
 SPIN_SPEED_RIGHT = 5000
 SPIN_SPEED_LEFT = 6900
 PAN_CENTER = 6000
-TILT_CENTER = 4500
+TILT_CENTER = 4600
 TILT_UP = 7000
 ARM_DOWN = 4350
 ARM_UP = 8000
@@ -245,6 +245,7 @@ def find_markers(frame, target_id):
 
     if (target_id == 0):
         print("checking for 0")
+
     if ids is not None:
         ids = ids.flatten()
         if target_id in ids:
