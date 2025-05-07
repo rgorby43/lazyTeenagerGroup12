@@ -710,6 +710,8 @@ def run_robot_room_cleaner_demo():
         # 2. Ask for the Object & 3. Identify the Object
         object_name, target_aruco_id_for_drop = identify_object_in_view(timeout_sec=20, display=True)
 
+        print("DEBUG: MAIN THREAD - post object detect call")
+
         if object_name and target_aruco_id_for_drop is not None:
             # 4. Wait for the Ring Ritual (Raise arm)
             perform_arm_raise_for_ritual()
