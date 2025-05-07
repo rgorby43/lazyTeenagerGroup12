@@ -509,11 +509,12 @@ def start_non_blocking_timed_movement(movement_function_ref, duration_sec, *args
     # print(f"MAIN: Started non-blocking movement: {movement_function_ref.__name__} for {duration_sec}s")
     return True # Indicate movement was successfully started
 
+
 def navigate_to_aruco_marker(target_id, display=True):
     global pipeline, aruco_detector_instance, camera_matrix, distortion_coeffs
     global _movement_thread_active_flag, movement_thread  # For managing threaded turns
 
-    speak(f"Ugh, find marker {target_id}.")
+    speak(f"Ugh, find marker {target_id} by turning right and approaching to 1 foot.")
 
     if not pipeline or not pipeline.get_active_profile():
         speak("My eyes aren't working (pipeline not active). Can't navigate.")
@@ -528,41 +529,41 @@ def navigate_to_aruco_marker(target_id, display=True):
             print(f"DEBUG: Failed to create window '{window_name}': {e}");
             display = False
 
-    TARGET_DISTANCE_Z = 0.35
-    ACCEPTABLE_X_OFFSET = 0.05
+    # MODIFIED: Target distance to 1 foot (approx 0.3048 meters)
+    TARGET_DISTANCE_Z = 0.3048
+    ACCEPTABLE_X_OFFSET = 0.05  # Keep this for centering
     MOVE_INCREMENT_DURATION = 0.3
-    TURN_INCREMENT_DURATION = 0.2
-    SEARCH_TURN_DURATION = 0.5  # Default duration for search turns
-    MAX_NAVIGATION_ATTEMPTS = 20
+    TURN_INCREMENT_DURATION = 0.2  # For fine alignment turns
 
-    FIELD_MARKERS_CLOCKWISE = [1, 2, 3, 4]
-    found_initial_orientation_marker = False
-    last_seen_marker_id = -1
+    # MODIFIED: SEARCH_TURN_DURATION will be the length of each segment of the "continuous" right turn
+    SEARCH_TURN_DURATION = 0.5  # Duration of each non-blocking right turn segment
+    MAX_NAVIGATION_ATTEMPTS = 40  # Increased attempts to allow for more turning
+
+    # FIELD_MARKERS_CLOCKWISE is no longer used for turning strategy in this simplified version, but kept for context if needed
+    # FIELD_MARKERS_CLOCKWISE = [1, 2, 3, 4]
+    found_initial_orientation_marker = False  # Still useful for knowing if *any* marker was seen for context
+    last_seen_marker_id = -1  # Still useful for context
     attempts = 0
 
     # --- Threading & Cooldown Variables ---
-    last_non_blocking_turn_command_time = 0.0  # Time of the last non-blocking turn command
-    # Cooldown: use the longest typical search turn duration + a buffer
-    # The `attempts % 5 == 1` case uses 1.2s, so base cooldown on that.
-    LONGEST_SEARCH_TURN_DURATION = 1.2
-    NON_BLOCKING_TURN_COOLDOWN = LONGEST_SEARCH_TURN_DURATION + 0.4  # Cooldown before another non-blocking turn can start
+    last_non_blocking_turn_command_time = 0.0
+    # MODIFIED: Cooldown should be based on the SEARCH_TURN_DURATION for the right turn segments
+    NON_BLOCKING_TURN_COOLDOWN = SEARCH_TURN_DURATION + 0.2  # Cooldown (turn segment duration + small buffer)
 
     look_center_timed()  # Initial head centering, blocking is fine here.
 
     while attempts < MAX_NAVIGATION_ATTEMPTS:
         attempts += 1
-        current_frame_time = time.time()  # For cooldown logic
+        current_frame_time = time.time()
         frames = None
         try:
-            # Consider reducing timeout_ms for faster loop if CPU allows and frames are arriving quickly
-            frames = pipeline.wait_for_frames(timeout_ms=1000)
+            frames = pipeline.wait_for_frames(timeout_ms=500)  # Slightly lower timeout for responsiveness
         except RuntimeError as e:
             print(f"DEBUG: RealSense RuntimeError in ArUco nav: {e}. Skipping frame.")
-            time.sleep(0.05)  # Short sleep on error
-            # More robust error check:
+            time.sleep(0.05)
             if "Frame didn't arrive within" not in str(e) and "No Frames" not in str(e) and "Timed out" not in str(
                     e).lower():
-                break  # Exit on more serious or persistent errors
+                break
             continue
 
         if not frames: continue
@@ -588,7 +589,7 @@ def navigate_to_aruco_marker(target_id, display=True):
                     tvec = tvecs[i][0]
                     rvec = rvecs[i][0]
 
-                    if display:  # Drawing logic (unchanged)
+                    if display:
                         try:
                             cv2.drawFrameAxes(frame, camera_matrix, distortion_coeffs, rvec, tvec,
                                               MARKER_SIZE_METERS * 0.5)
@@ -599,26 +600,31 @@ def navigate_to_aruco_marker(target_id, display=True):
                         except Exception as e:
                             print(f"DEBUG: Error drawing ArUco details: {e}")
 
-                    if not found_initial_orientation_marker and current_id in FIELD_MARKERS_CLOCKWISE:
+                    # Update context even if not the target yet
+                    if not found_initial_orientation_marker:  # and current_id in FIELD_MARKERS_CLOCKWISE: (can remove field marker check if not used)
                         found_initial_orientation_marker = True
-                        last_seen_marker_id = current_id
-                        speak(f"Spotted marker {current_id}.")
+                    last_seen_marker_id = current_id
+                    # speak(f"Spotted marker {current_id}.") # Can be noisy, enable for debug
 
                     if current_id == target_id:
                         target_seen_this_frame = True
                         dist_z = tvec[2]
                         offset_x = tvec[0]
 
-                        # --- Target Seen: Stop non-blocking turn and use precise blocking moves ---
+                        # --- Target IS Seen ---
+                        # 1. Stop any ongoing (non-blocking) search turn IMMEDIATELY
                         if _movement_thread_active_flag.is_set():
-                            speak("Target sighted! Halting search turn for precise alignment.")
+                            speak(f"Target marker {target_id} sighted! Stopping search turn.")
                             stop_all_movement()
                             # The non-blocking thread will eventually clear its flag.
-                            # Subsequent movements are blocking and precise.
 
-                        if dist_z < TARGET_DISTANCE_Z and abs(offset_x) < ACCEPTABLE_X_OFFSET:
+                        # 2. Check if at desired distance and alignment (1 foot)
+                        # Adjusted condition: If dist_z is close to TARGET_DISTANCE_Z (e.g., within a small tolerance)
+                        # For simplicity, if it's less than TARGET_DISTANCE_Z + a small forward epsilon, and centered.
+                        if dist_z < (TARGET_DISTANCE_Z + 0.03) and abs(
+                                offset_x) < ACCEPTABLE_X_OFFSET:  # Within 3cm of 1ft and centered
                             stop_all_movement()
-                            speak(f"Okay, I'm here at marker {target_id}.")
+                            speak(f"Okay, I'm at marker {target_id}, approx. 1 foot away.")
                             if display:
                                 try:
                                     cv2.destroyWindow(window_name); cv2.waitKey(1)
@@ -626,80 +632,53 @@ def navigate_to_aruco_marker(target_id, display=True):
                                     print(f"DEBUG: destroyWindow '{window_name}' failed: {e}")
                             return True  # SUCCESS
 
-                        # Precise (blocking) movements:
-                        if dist_z > TARGET_DISTANCE_Z + 0.05:
-                            if abs(offset_x) > ACCEPTABLE_X_OFFSET * 1.5:
-                                if offset_x > 0:
-                                    turn_left_timed(TURN_INCREMENT_DURATION * 0.6)
-                                else:
-                                    turn_right_timed(TURN_INCREMENT_DURATION * 0.6)
-                            else:
-                                move_forward_timed(MOVE_INCREMENT_DURATION * 0.7)
-                        elif abs(offset_x) > ACCEPTABLE_X_OFFSET:
+                        # 3. Precise (blocking) movements to align and approach TARGET_DISTANCE_Z
+                        if dist_z > TARGET_DISTANCE_Z + 0.05:  # If robot is further than ~1 foot + 5cm
+                            if abs(offset_x) > ACCEPTABLE_X_OFFSET * 1.2:  # If significantly off-center, prioritize turning
+                                if offset_x > 0:  # Marker is to robot's right, robot turns left
+                                    speak(f"Aligning: Target {target_id} to my right, turning left.")
+                                    turn_left_timed(TURN_INCREMENT_DURATION * 0.5)
+                                else:  # Marker is to robot's left, robot turns right
+                                    speak(f"Aligning: Target {target_id} to my left, turning right.")
+                                    turn_right_timed(TURN_INCREMENT_DURATION * 0.5)
+                            else:  # If reasonably centered, move forward
+                                speak(f"Approaching: Moving forward to target {target_id}.")
+                                move_forward_timed(MOVE_INCREMENT_DURATION * 0.6)
+                        elif abs(offset_x) > ACCEPTABLE_X_OFFSET:  # If at roughly correct Z, but off-center X
                             if offset_x > 0:
-                                turn_left_timed(TURN_INCREMENT_DURATION * 0.5)
+                                speak(f"Centering: Target {target_id} to my right, turning left.")
+                                turn_left_timed(TURN_INCREMENT_DURATION * 0.4)
                             else:
-                                turn_right_timed(TURN_INCREMENT_DURATION * 0.5)
-                        elif dist_z < TARGET_DISTANCE_Z - 0.1:
-                            move_backward_timed(0.2)
-                        else:
-                            move_forward_timed(0.1)  # Creep
+                                speak(f"Centering: Target {target_id} to my left, turning right.")
+                                turn_right_timed(TURN_INCREMENT_DURATION * 0.4)
+                        elif dist_z < TARGET_DISTANCE_Z - 0.08:  # If too close (more than ~8cm closer than 1 foot)
+                            speak(f"Too close to {target_id}, backing up.")
+                            move_backward_timed(MOVE_INCREMENT_DURATION * 0.4)
+                        else:  # Minor forward creep if slightly too far but not caught by main forward condition
+                            # Or if slightly too close but not caught by backward condition.
+                            speak(f"Fine approach to {target_id}.")
+                            move_forward_timed(MOVE_INCREMENT_DURATION * 0.2)
 
-                        break  # Processed target, break from 'for ids' loop to get new frame after movement
+                        break  # Processed target, break from 'for ids' loop to get new frame
         # End of 'if ids is not None:'
 
-        # --- Target NOT Seen: Consider starting a non-blocking search turn ---
+        # --- Target NOT Seen: Continuously turn right (non-blocking segmented turns) ---
         if not target_seen_this_frame:
-            turn_initiated_this_cycle = False
+            # Check if a non-blocking turn is NOT already active AND cooldown period has passed
             if not _movement_thread_active_flag.is_set() and \
                     (current_frame_time - last_non_blocking_turn_command_time > NON_BLOCKING_TURN_COOLDOWN):
 
-                # speak("Target not seen. Considering a non-blocking turn.") # Optional debug
-
-                # 1. Try smart turning based on field markers
-                if found_initial_orientation_marker and target_id in FIELD_MARKERS_CLOCKWISE and last_seen_marker_id in FIELD_MARKERS_CLOCKWISE:
-                    try:
-                        current_idx = FIELD_MARKERS_CLOCKWISE.index(last_seen_marker_id)
-                        target_idx = FIELD_MARKERS_CLOCKWISE.index(target_id)
-                        diff = (target_idx - current_idx + len(FIELD_MARKERS_CLOCKWISE)) % len(FIELD_MARKERS_CLOCKWISE)
-
-                        if diff == 1:  # Target likely to robot's right
-                            speak(f"Target {target_id} might be right. Non-blocking right turn.")
-                            if start_non_blocking_timed_movement(turn_right_timed, SEARCH_TURN_DURATION * 0.6):
-                                turn_initiated_this_cycle = True
-                        elif diff == len(FIELD_MARKERS_CLOCKWISE) - 1:  # Target likely to robot's left
-                            speak(f"Target {target_id} might be left. Non-blocking left turn.")
-                            if start_non_blocking_timed_movement(turn_left_timed, SEARCH_TURN_DURATION * 0.6):
-                                turn_initiated_this_cycle = True
-                        else:  # Target further away
-                            speak(f"Target {target_id} far. Wider non-blocking right turn.")
-                            if start_non_blocking_timed_movement(turn_right_timed,
-                                                                 SEARCH_TURN_DURATION):  # Default wider turn
-                                turn_initiated_this_cycle = True
-                    except ValueError:  # Should not happen if logic is sound
-                        speak("Error in field marker logic. Defaulting to generic non-blocking turn.")
-                        if start_non_blocking_timed_movement(turn_right_timed, SEARCH_TURN_DURATION):
-                            turn_initiated_this_cycle = True
-                else:
-                    # 2. Generic search pattern (replaces old head looks and some body turns)
-                    if attempts % 5 == 1:
-                        speak("Generic search: Non-blocking long right turn.")
-                        if start_non_blocking_timed_movement(turn_right_timed, 1.2):  # Your specified 1.2s duration
-                            turn_initiated_this_cycle = True
-                    elif attempts % 5 == 0:
-                        speak("Generic search: Non-blocking standard right body turn.")
-                        if start_non_blocking_timed_movement(turn_right_timed, SEARCH_TURN_DURATION):
-                            turn_initiated_this_cycle = True
-                    # For other attempts % 5 values (2, 3, 4), no turn is initiated here,
-                    # allowing the robot to just scan while stationary for a few cycles.
-
-                if turn_initiated_this_cycle:
+                speak(f"Target {target_id} not seen. Starting a non-blocking right turn segment.")
+                # Initiate a segment of the right turn
+                if start_non_blocking_timed_movement(turn_right_timed, SEARCH_TURN_DURATION):
                     last_non_blocking_turn_command_time = current_frame_time  # Update timestamp
+                # else:
+                # speak("DEBUG: Failed to start non-blocking turn (should not happen if flag/cooldown logic is correct).")
 
             # else if _movement_thread_active_flag.is_set():
-            # print("DEBUG: Non-blocking turn in progress. Vision loop continues.") # Optional
+            #    speak(f"DEBUG: Non-blocking right turn in progress, searching for {target_id}...")
             # else:
-            # print(f"DEBUG: Cooldown active. Wait {NON_BLOCKING_TURN_COOLDOWN - (current_frame_time - last_non_blocking_turn_command_time):.2f}s for next turn.") # Optional
+            #    speak(f"DEBUG: Turn cooldown. Waiting to search for {target_id}...")
 
         if display:
             try:
@@ -708,36 +687,33 @@ def navigate_to_aruco_marker(target_id, display=True):
                 print(f"DEBUG: imshow failed in ArUco nav: {e}");
                 display = False
 
-        key = cv2.waitKey(1) & 0xFF  # Essential for OpenCV window and keeping loop responsive
+        key = cv2.waitKey(1) & 0xFF
         if key == ord('q'): speak("Navigation quit by user."); break
         if display:
             try:
-                if cv2.getWindowProperty(window_name, cv2.WND_PROP_VISIBLE) < 1: break  # Window closed
-            except:  # Error checking window, assume closed
+                if cv2.getWindowProperty(window_name, cv2.WND_PROP_VISIBLE) < 1: break
+            except:
                 break
 
-        # Removed the general time.sleep(0.1) from here.
-        # Loop speed is now governed by frame acquisition, processing, waitKey(1), and turn cooldowns.
-
     # --- End of while loop ---
-    speak(f"Giving up on marker {target_id} after {attempts} attempts.")
+    if not target_seen_this_frame:  # Only say this if we exited loop without ever reaching target success
+        speak(f"Giving up on finding marker {target_id} after {attempts} attempts.")
 
     # --- Cleanup before exiting function ---
     if _movement_thread_active_flag.is_set():
         speak("Navigation function ending. Stopping any active search movement.")
-        stop_all_movement()  # Ensure motors are stopped
+        stop_all_movement()
         if movement_thread and movement_thread.is_alive():
-            # print("DEBUG: Waiting for active movement thread to complete its cycle...")
-            movement_thread.join(timeout=LONGEST_SEARCH_TURN_DURATION + 0.2)  # Wait for thread to finish
-        _movement_thread_active_flag.clear()  # Explicitly clear flag
+            movement_thread.join(timeout=SEARCH_TURN_DURATION + 0.2)
+        _movement_thread_active_flag.clear()
 
     if display:
         try:
-            cv2.destroyWindow(window_name);
-            cv2.waitKey(1)
+            cv2.destroyWindow(window_name); cv2.waitKey(1)
         except Exception as e:
             print(f"DEBUG: destroyWindow '{window_name}' after timeout failed: {e}")
-    return False
+    return False  # Return False if loop finishes without success
+
 
 # --- MAIN APPLICATION SCRIPT ---
 def run_robot_room_cleaner_demo():
