@@ -12,7 +12,7 @@ import cv2.aruco as aruco
 
 # Assuming face_detector_module.py is in the Python path (e.g. /home/group12/)
 # or in the same directory
-from face_detector_module import RealSenseFaceDetector  # Corrected import if file is named face_detector_module.py
+from faceRecognition import RealSenseFaceDetector  # Corrected import if file is named face_detector_module.py
 
 # --- DUMMY CLASSES/FUNCTIONS (Keep your existing dummies or real imports) ---
 try:
