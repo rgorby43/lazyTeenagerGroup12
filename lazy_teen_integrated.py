@@ -301,26 +301,26 @@ def wait_for_human_face_trigger(display=True):
 
 
 def identify_object_in_view(timeout_sec=15, display=True):
-    global pipeline, orb_detector, bf_matcher, trained_objects_data
-    speak("Alright, show me the junk. Make it quick.")
-    # print("DEBUG: Entered identify_object_in_view")
+    global pipeline, orb_detector, bf_matcher, trained_objects_data, OBJECT_CONSISTENCY_DURATION, COUNT_THRESH
+    speak("Alright, show me the junk. Make it quick. And hold it steady for like, a second.")
 
     if not pipeline or not pipeline.get_active_profile():
         speak("My eyes aren't working (pipeline not active). Can't see objects.")
-        print("DEBUG: identify_object_in_view - pipeline not active or None.")
         return None, None
 
     window_name = "LazyTeen: Object Recognition"
     if display:
-        # print(f"DEBUG: Creating OpenCV window: {window_name}")
         try:
             cv2.namedWindow(window_name, cv2.WINDOW_AUTOSIZE)
         except Exception as e:
-            print(f"DEBUG: FAILED TO CREATE WINDOW '{window_name}': {e}")
-            display = False  # Disable display if window creation fails
+            print(f"DEBUG: FAILED TO CREATE WINDOW '{window_name}': {e}"); display = False
 
     start_time = time.time()
-    best_obj_name, best_obj_id = None, None
+
+    # Variables for consistency check
+    consistent_detection_start_time = None
+    current_consistent_object_name = None
+    current_consistent_object_id = None
 
     while time.time() - start_time < timeout_sec:
         frames = None
@@ -328,9 +328,8 @@ def identify_object_in_view(timeout_sec=15, display=True):
             frames = pipeline.wait_for_frames(timeout_ms=1000)
         except RuntimeError as e:
             print(f"DEBUG: RealSense RuntimeError in object_in_view: {e}. Skipping frame.")
-            time.sleep(0.1)  # prevent busy loop on error
-            if "Frame didn't arrive within" not in str(e):  # if more serious error
-                break  # Exit loop
+            time.sleep(0.1)
+            if "Frame didn't arrive within" not in str(e): break
             continue
 
         if not frames: continue
@@ -341,82 +340,98 @@ def identify_object_in_view(timeout_sec=15, display=True):
         gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         kp_scene, des_scene = orb_detector.detectAndCompute(gray_frame, None)
 
-        if des_scene is None or len(des_scene) < 2:
-            if display:
-                cv2.putText(frame, "Detecting...", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 165, 255), 2)
-                try:
-                    cv2.imshow(window_name, frame)
-                except Exception as e:
-                    print(f"DEBUG: imshow failed in object_in_view (no_descriptors): {e}"); display = False
-            if cv2.waitKey(1) & 0xFF == ord('q'): break
-            continue
+        # Best object found in *this current frame*
+        best_name_this_frame = None
+        best_id_this_frame = None
+        max_matches_this_frame = 0
 
-        max_good_matches = 0
-        current_best_name, current_best_id = None, None
+        if des_scene is not None and len(des_scene) >= 2:
+            for obj_data in trained_objects_data:
+                obj_name_candidate = obj_data.get('name', 'Unknown')
+                obj_id_candidate = obj_data.get('id', -1)
+                trained_descriptors_list = obj_data.get('descriptors')
+                if trained_descriptors_list is None: continue
 
-        for obj_data in trained_objects_data:
-            obj_name_candidate = obj_data.get('name', 'Unknown')
-            obj_id_candidate = obj_data.get('id', -1)
-            trained_descriptors_list = obj_data.get('descriptors')
-            if trained_descriptors_list is None: continue
+                current_object_total_good_matches = 0
+                for des_train in trained_descriptors_list:
+                    if des_train is None or len(des_train) < 2: continue
+                    if des_train.dtype != np.uint8: des_train = np.uint8(des_train)
 
-            current_object_total_good_matches = 0
-            for des_train in trained_descriptors_list:
-                if des_train is None or len(des_train) < 2: continue
-                if des_train.dtype != np.uint8: des_train = np.uint8(des_train)
+                    des_scene_uint8 = des_scene
+                    if des_scene.dtype != np.uint8: des_scene_uint8 = np.uint8(des_scene)
 
-                des_scene_uint8 = des_scene  # Assume des_scene is already uint8 from ORB
-                if des_scene.dtype != np.uint8: des_scene_uint8 = np.uint8(des_scene)
+                    try:
+                        matches = bf_matcher.knnMatch(des_train, des_scene_uint8, k=2)
+                    except cv2.error:
+                        continue
 
-                try:
-                    matches = bf_matcher.knnMatch(des_train, des_scene_uint8, k=2)
-                except cv2.error as e:
-                    # print(f"DEBUG: cv2.error knnMatch: {e}")
-                    continue
+                    for match_pair in matches:
+                        if len(match_pair) == 2:
+                            m, n = match_pair
+                            if m.distance < RATIO_THRESH * n.distance and m.distance < DIST_THRESH:
+                                current_object_total_good_matches += 1
 
-                good_matches_count_this_set = 0
-                for match_pair in matches:
-                    if len(match_pair) == 2:
-                        m, n = match_pair
-                        if m.distance < RATIO_THRESH * n.distance and m.distance < DIST_THRESH:
-                            good_matches_count_this_set += 1
-                current_object_total_good_matches += good_matches_count_this_set
+                if current_object_total_good_matches > max_matches_this_frame:
+                    max_matches_this_frame = current_object_total_good_matches
+                    best_name_this_frame = obj_name_candidate
+                    best_id_this_frame = obj_id_candidate
 
-            if current_object_total_good_matches > max_good_matches:
-                max_good_matches = current_object_total_good_matches
-                current_best_name = obj_name_candidate
-                current_best_id = obj_id_candidate
-
+        # --- Consistency Logic ---
         display_label = "Detecting..."
-        label_color = (0, 165, 255)
+        label_color = (0, 165, 255)  # Orange for detecting
 
-        if current_best_name and max_good_matches >= COUNT_THRESH:
-            display_label = f"FOUND: {current_best_name} (ID:{current_best_id}) M:{max_good_matches}"
-            label_color = (0, 255, 0)
-            best_obj_name, best_obj_id = current_best_name, current_best_id  # Lock in final choice
-            if display:
-                cv2.putText(frame, display_label, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, label_color, 2)
-                try:
-                    cv2.imshow(window_name, frame)
-                except Exception as e:
-                    print(f"DEBUG: imshow failed in object_in_view (found): {e}"); display = False
-                cv2.waitKey(1)
-            speak(f"Fine. That's {best_obj_name}. Box #{best_obj_id}.")
-            if display:
-                try:
-                    cv2.destroyWindow(window_name); cv2.waitKey(1)
-                except Exception as e:
-                    print(f"DEBUG: destroyWindow '{window_name}' failed: {e}")
-            return best_obj_name, best_obj_id
-        elif current_best_name:
-            display_label = f"Maybe: {current_best_name} ({max_good_matches})"
+        if best_name_this_frame and max_matches_this_frame >= COUNT_THRESH:
+            # An object meeting criteria is seen in this frame
+            if current_consistent_object_name == best_name_this_frame:
+                # Same object as before, check duration
+                elapsed_consistent_time = time.time() - consistent_detection_start_time
+                if elapsed_consistent_time >= OBJECT_CONSISTENCY_DURATION:
+                    # CONFIRMED!
+                    display_label = f"CONFIRMED: {best_name_this_frame} (ID:{best_id_this_frame})"
+                    label_color = (0, 255, 0)  # Green for confirmed
+                    if display:
+                        cv2.putText(frame, display_label, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, label_color, 2)
+                        try:
+                            cv2.imshow(window_name, frame)
+                        except Exception as e:
+                            print(f"DEBUG: imshow failed (confirmed): {e}"); display = False
+                        cv2.waitKey(1)  # Show final confirmation
+                    speak(f"Fine. That's the {best_name_this_frame}. Guess I will put it in box #{best_id_this_frame}.")
+                    if display:
+                        try:
+                            cv2.destroyWindow(window_name); cv2.waitKey(1)
+                        except Exception as e:
+                            print(f"DEBUG: destroyWindow '{window_name}' failed: {e}")
+                    return best_name_this_frame, best_id_this_frame
+                else:
+                    # Still tracking, duration not met
+                    display_label = f"Tracking: {best_name_this_frame} ({elapsed_consistent_time:.1f}s / {OBJECT_CONSISTENCY_DURATION:.1f}s)"
+                    label_color = (0, 255, 255)  # Yellow for tracking
+            else:
+                # New potential object, or different from last tracked one
+                print(f"DEBUG: New potential object for consistency: {best_name_this_frame}")
+                consistent_detection_start_time = time.time()
+                current_consistent_object_name = best_name_this_frame
+                current_consistent_object_id = best_id_this_frame
+                display_label = f"Tracking: {best_name_this_frame} (0.0s / {OBJECT_CONSISTENCY_DURATION:.1f}s)"
+                label_color = (0, 255, 255)  # Yellow for tracking
+        else:
+            # No object met COUNT_THRESH in this frame, or no descriptors
+            if current_consistent_object_name:
+                print(f"DEBUG: Lost consistent track of {current_consistent_object_name}. Resetting.")
+            consistent_detection_start_time = None
+            current_consistent_object_name = None
+            current_consistent_object_id = None
+            if best_name_this_frame:  # Show if something was weakly detected
+                display_label = f"Maybe: {best_name_this_frame} ({max_matches_this_frame} matches)"
+                label_color = (0, 165, 255)  # Orange
 
         if display:
             cv2.putText(frame, display_label, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, label_color, 2)
             try:
                 cv2.imshow(window_name, frame)
             except Exception as e:
-                print(f"DEBUG: imshow failed in object_in_view (detecting): {e}"); display = False
+                print(f"DEBUG: imshow failed (loop end): {e}"); display = False
 
         key = cv2.waitKey(1) & 0xFF
         if key == ord('q'): print("DEBUG: 'q' pressed. Exiting object ID."); break
@@ -424,16 +439,15 @@ def identify_object_in_view(timeout_sec=15, display=True):
             try:
                 if cv2.getWindowProperty(window_name, cv2.WND_PROP_VISIBLE) < 1: break
             except:
-                break  # Window closed or error
+                break
 
-    speak("Couldn't recognize anything clearly.")
+    speak("Couldn't recognize anything consistently. Or maybe I just zoned out.")
     if display:
         try:
             cv2.destroyWindow(window_name); cv2.waitKey(1)
         except Exception as e:
             print(f"DEBUG: destroyWindow '{window_name}' after timeout failed: {e}")
     return None, None
-
 
 def navigate_to_aruco_marker(target_id, display=True):
     global pipeline, aruco_detector_instance, camera_matrix, distortion_coeffs
