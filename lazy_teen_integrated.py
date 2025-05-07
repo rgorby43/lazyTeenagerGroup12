@@ -10,6 +10,7 @@ import time
 import pyrealsense2 as rs
 import cv2.aruco as aruco
 import threading  # <<< --- ADD THIS LINE HERE ---
+import subprocess
 
 # Assuming face_detector_module.py is in the Python path (e.g. /home/group12/)
 # or in the same directory
