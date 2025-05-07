@@ -10,7 +10,7 @@ import time
 import pyrealsense2 as rs
 import cv2.aruco as aruco
 import threading  # <<< --- ADD THIS LINE HERE ---
-import subprocess
+import pyttsx3
 
 # Assuming face_detector_module.py is in the Python path (e.g. /home/group12/)
 # or in the same directory
@@ -55,6 +55,11 @@ OBJECT_CONSISTENCY_DURATION = 1.0  # NEW: Seconds an object must be consistently
 FACE_DETECTION_DURATION = 1
 MIN_FACE_SIZE = (100, 100)
 
+engine = pyttsx3.init()
+voices = engine.getProperty('voices')
+engine.setProperty('voice', voices[1].id)
+
+
 # --- GLOBAL VARIABLES ---
 pipeline = None
 orb_detector = None
@@ -72,10 +77,10 @@ _continuous_turn_stop_event = threading.Event() # Used to signal the continuous 
 _is_continuous_turning_flag = threading.Event() # True if robot is in continuous turn mode
 
 # --- HELPER: TEXT-TO-SPEECH ---
+# --- HELPER: TEXT-TO-SPEECH ---
 def speak(text):
-    print(f"\n🤖 LAZY TEEN SAYS: {text}\n")
-
-
+    engine.say(text)
+    engine.runAndWait()
 # --- INITIALIZATION FUNCTIONS (largely unchanged, but init_face_detector passes pipeline) ---
 
 def init_realsense_camera():
