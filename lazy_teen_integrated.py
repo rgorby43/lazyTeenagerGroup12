@@ -63,6 +63,8 @@ maestro_controller = None
 camera_matrix = None
 distortion_coeffs = None
 face_detector_instance = None  # Will be initialized in init_face_detector
+movement_thread = None  # To hold the thread object
+_movement_thread_active_flag = threading.Event()
 
 
 # --- HELPER: TEXT-TO-SPEECH ---
