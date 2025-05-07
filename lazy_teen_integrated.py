@@ -703,7 +703,10 @@ def run_robot_room_cleaner_demo():
     # 1. Wait for a Human Face
     if wait_for_human_face_trigger(display=True):  # If face IS detected
         # The "Ugh. What now?" is already spoken by wait_for_human_face_trigger on success
-
+        print("DEBUG: Returned from wait_for_human_face_trigger.")
+        print("DEBUG: MAIN THREAD - Attempting to destroy ALL OpenCV windows.")
+        cv2.destroyAllWindows()
+        cv2.waitKey(50)
         # 2. Ask for the Object & 3. Identify the Object
         object_name, target_aruco_id_for_drop = identify_object_in_view(timeout_sec=20, display=True)
 
