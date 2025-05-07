@@ -24,6 +24,7 @@ ROTATE = 1
 PAN = 3
 TILT = 4
 RIGHT_ARM = 5
+WAIST = 2
 
 # Maestro Server Speeds
 NEUTRAL = 6000
@@ -44,6 +45,7 @@ maestro.setTarget(ROTATE, NEUTRAL)
 maestro.setTarget(PAN, PAN_CENTER)
 maestro.setTarget(TILT, TILT_CENTER)
 maestro.setTarget(RIGHT_ARM, ARM_DOWN)
+maestro.setTarget(WAIST, NEUTRAL)
 
 # ArUco marker setup, loads the library, sets default viewing info, assigns 3D space values and then tells
 # the camera there is no distortion
@@ -241,6 +243,8 @@ def find_markers(frame, target_id):
     # Detect markers in the frame
     corners, ids, _ = cv2.aruco.detectMarkers(frame, aruco_dict, parameters=parameters)
 
+    if (target_id == 0):
+
     if ids is not None:
         ids = ids.flatten()
         if target_id in ids:
@@ -347,7 +351,7 @@ def drop_ring():
     toss_ring()  # comment this out if it doesn't work
     move_arm()
     time.sleep(5)
-    threading.Thread(target=speak, args=("I'm always cleaning up after you kids",), daemon=True).start()
+    threading.Thread(target=speak, args=("I'm always cleaning up after you",), daemon=True).start()
     time.sleep(2)
 
 
