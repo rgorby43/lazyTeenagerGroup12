@@ -219,10 +219,12 @@ def move_backward_timed(duration, speed_pulse=7500):
 
 
 def turn_left_timed(duration, turn_pulse=7000):
-    speak("Turning left.");
+    speak("Turning left.")
     set_servo_target(SERVOS["wheels_opposite"],
     turn_pulse); set_servo_target(
-    SERVOS["wheels_both"], NEUTRAL); time.sleep(duration); stop_all_movement()
+    SERVOS["wheels_both"], NEUTRAL)
+    time.sleep(duration)
+    stop_all_movement()
 
 
 def turn_right_timed(duration, turn_pulse=5000):
@@ -233,33 +235,36 @@ def turn_right_timed(duration, turn_pulse=5000):
 
 
 def stop_all_movement():
-    set_servo_target(SERVOS["wheels_both"], NEUTRAL);
+    set_servo_target(SERVOS["wheels_both"], NEUTRAL)
     set_servo_target(SERVOS["wheels_opposite"],NEUTRAL)
 
 
 def look_left_timed(duration=0.5, look_target=8000):
-    set_servo_target(SERVOS["head_side_to_side"],ook_target);
+    set_servo_target(SERVOS["head_side_to_side"],look_target)
     time.sleep(duration)
 
 
 def look_right_timed(duration=0.5, look_target=4000):
-    set_servo_target(SERVOS["head_side_to_side"],look_target);
+    set_servo_target(SERVOS["head_side_to_side"],look_target)
     time.sleep(duration)
 
 
 def look_center_timed(duration=0.3):
-    set_servo_target(SERVOS["head_side_to_side"], NEUTRAL);
+    set_servo_target(SERVOS["head_side_to_side"], NEUTRAL)
     time.sleep(duration)
 
 
 def perform_arm_raise_for_ritual():
-    speak("Arm's up.");
-    set_servo_target(SERVOS["right_arm_shoulder"], 5000); time.sleep(
-    1.5); print(">>> USER: Place 'ring'. Waiting 5s. <<<"); time.sleep(5)
+    speak("Arm's up.")
+    set_servo_target(SERVOS["right_arm_shoulder"], 5000)
+    time.sleep(1.5); print(">>> USER: Place 'ring'. Waiting 5s. <<<"); time.sleep(5)
 
-def perform_ring_drop(): speak("Dropping this."); set_servo_target(SERVOS["right_arm_actuator"], 7000); time.sleep(
-    1); set_servo_target(SERVOS["right_arm_shoulder"], NEUTRAL); time.sleep(1); set_servo_target(
-    SERVOS["right_arm_actuator"], NEUTRAL); speak("There. Not in the box. Oh well.")
+def perform_ring_drop():
+    speak("Dropping this.")
+    set_servo_target(SERVOS["right_arm_actuator"], 7000)
+    time.sleep(1)
+    set_servo_target(SERVOS["right_arm_shoulder"], NEUTRAL); time.sleep(1)
+    set_servo_target(SERVOS["right_arm_actuator"], NEUTRAL); speak("There. Not in the box. Oh well.")
 
 
 def reset_robot_to_neutral_stance(): speak("Resetting."); stop_all_movement(); look_center_timed(0.5); set_servo_target(
@@ -464,8 +469,26 @@ def identify_object_in_view(timeout_sec=15, display=True):
             print(f"DEBUG: destroyWindow '{window_name}' after timeout failed: {e}")
     return None, None
 
+def _execute_timed_movement_in_thread(movement_function_to_call, movement_duration, *args_for_movement_function):
+    """
+    Wrapper to execute a timed movement function (e.g., turn_left_timed) in a thread.
+    Manages the _movement_thread_active_flag.
+    """
+    global _movement_thread_active_flag
+    try:
+        # Optional: print(f"THREAD: Starting {movement_function_to_call.__name__} for {movement_duration}s")
+        movement_function_to_call(movement_duration, *args_for_movement_function) # This function handles its own speak, servo commands, sleep, and stop
+        # Optional: print(f"THREAD: Finished {movement_function_to_call.__name__}")
+    except Exception as e:
+        print(f"THREAD: Error during movement {movement_function_to_call.__name__}: {e}")
+    finally:
+        _movement_thread_active_flag.clear() # Signal that movement is complete
+
+
 def navigate_to_aruco_marker(target_id, display=True):
     global pipeline, aruco_detector_instance, camera_matrix, distortion_coeffs
+    global _movement_thread_active_flag, movement_thread  # For managing threaded turns
+
     speak(f"Ugh, find marker {target_id}.")
 
     if not pipeline or not pipeline.get_active_profile():
@@ -478,30 +501,44 @@ def navigate_to_aruco_marker(target_id, display=True):
         try:
             cv2.namedWindow(window_name, cv2.WINDOW_AUTOSIZE)
         except Exception as e:
-            print(f"DEBUG: Failed to create window '{window_name}': {e}"); display = False
+            print(f"DEBUG: Failed to create window '{window_name}': {e}");
+            display = False
 
     TARGET_DISTANCE_Z = 0.35
     ACCEPTABLE_X_OFFSET = 0.05
-    MOVE_INCREMENT_DURATION = 0.3  # Slightly shorter
-    TURN_INCREMENT_DURATION = 0.2  # Slightly shorter
-    SEARCH_TURN_DURATION = 0.5  # Slightly shorter
-    MAX_NAVIGATION_ATTEMPTS = 20  # More attempts
+    MOVE_INCREMENT_DURATION = 0.3
+    TURN_INCREMENT_DURATION = 0.2
+    SEARCH_TURN_DURATION = 0.5  # Default duration for search turns
+    MAX_NAVIGATION_ATTEMPTS = 20
 
     FIELD_MARKERS_CLOCKWISE = [1, 2, 3, 4]
     found_initial_orientation_marker = False
     last_seen_marker_id = -1
     attempts = 0
-    look_center_timed()
+
+    # --- Threading & Cooldown Variables ---
+    last_non_blocking_turn_command_time = 0.0  # Time of the last non-blocking turn command
+    # Cooldown: use the longest typical search turn duration + a buffer
+    # The `attempts % 5 == 1` case uses 1.2s, so base cooldown on that.
+    LONGEST_SEARCH_TURN_DURATION = 1.2
+    NON_BLOCKING_TURN_COOLDOWN = LONGEST_SEARCH_TURN_DURATION + 0.4  # Cooldown before another non-blocking turn can start
+
+    look_center_timed()  # Initial head centering, blocking is fine here.
 
     while attempts < MAX_NAVIGATION_ATTEMPTS:
         attempts += 1
+        current_frame_time = time.time()  # For cooldown logic
         frames = None
         try:
+            # Consider reducing timeout_ms for faster loop if CPU allows and frames are arriving quickly
             frames = pipeline.wait_for_frames(timeout_ms=1000)
         except RuntimeError as e:
             print(f"DEBUG: RealSense RuntimeError in ArUco nav: {e}. Skipping frame.")
-            time.sleep(0.1)
-            if "Frame didn't arrive within" not in str(e): break
+            time.sleep(0.05)  # Short sleep on error
+            # More robust error check:
+            if "Frame didn't arrive within" not in str(e) and "No Frames" not in str(e) and "Timed out" not in str(
+                    e).lower():
+                break  # Exit on more serious or persistent errors
             continue
 
         if not frames: continue
@@ -514,26 +551,24 @@ def navigate_to_aruco_marker(target_id, display=True):
 
         if ids is not None:
             aruco.drawDetectedMarkers(frame, corners, ids)
-            # Pose estimation can fail if markers are too small/far, or calibration is off
             try:
                 rvecs, tvecs, _ = aruco.estimatePoseSingleMarkers(corners, MARKER_SIZE_METERS, camera_matrix,
                                                                   distortion_coeffs)
             except cv2.error as e:
                 print(f"DEBUG: ArUco pose estimation error: {e}. Skipping pose this frame.")
-                rvecs, tvecs = None, None  # Ensure they are None if estimation fails
+                rvecs, tvecs = None, None
 
-            if rvecs is not None and tvecs is not None:  # Check if pose estimation was successful
+            if rvecs is not None and tvecs is not None:
                 for i, current_id_arr in enumerate(ids):
                     current_id = current_id_arr[0]
                     tvec = tvecs[i][0]
                     rvec = rvecs[i][0]
 
-                    if display:
+                    if display:  # Drawing logic (unchanged)
                         try:
                             cv2.drawFrameAxes(frame, camera_matrix, distortion_coeffs, rvec, tvec,
                                               MARKER_SIZE_METERS * 0.5)
                             pos_str = f"ID:{current_id} X:{tvec[0]:.2f} Z:{tvec[2]:.2f}"
-                            # Ensure corner points are valid before drawing text
                             if corners[i] is not None and len(corners[i][0]) > 0:
                                 text_origin = tuple(corners[i][0][0].astype(int) - np.array([0, 10]))
                                 cv2.putText(frame, pos_str, text_origin, cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
@@ -549,7 +584,13 @@ def navigate_to_aruco_marker(target_id, display=True):
                         target_seen_this_frame = True
                         dist_z = tvec[2]
                         offset_x = tvec[0]
-                        # speak(f"Target {target_id} sighted. Z:{dist_z:.2f}m, X:{offset_x:.2f}m.") # Too chatty
+
+                        # --- Target Seen: Stop non-blocking turn and use precise blocking moves ---
+                        if _movement_thread_active_flag.is_set():
+                            speak("Target sighted! Halting search turn for precise alignment.")
+                            stop_all_movement()
+                            # The non-blocking thread will eventually clear its flag.
+                            # Subsequent movements are blocking and precise.
 
                         if dist_z < TARGET_DISTANCE_Z and abs(offset_x) < ACCEPTABLE_X_OFFSET:
                             stop_all_movement()
@@ -559,15 +600,16 @@ def navigate_to_aruco_marker(target_id, display=True):
                                     cv2.destroyWindow(window_name); cv2.waitKey(1)
                                 except Exception as e:
                                     print(f"DEBUG: destroyWindow '{window_name}' failed: {e}")
-                            return True
+                            return True  # SUCCESS
 
+                        # Precise (blocking) movements:
                         if dist_z > TARGET_DISTANCE_Z + 0.05:
-                            if abs(offset_x) > ACCEPTABLE_X_OFFSET * 1.5:  # If significantly off-center
+                            if abs(offset_x) > ACCEPTABLE_X_OFFSET * 1.5:
                                 if offset_x > 0:
-                                    turn_left_timed(TURN_INCREMENT_DURATION * 0.6)  # Marker to right, turn robot left
+                                    turn_left_timed(TURN_INCREMENT_DURATION * 0.6)
                                 else:
-                                    turn_right_timed(TURN_INCREMENT_DURATION * 0.6)  # Marker to left, turn robot right
-                            else:  # If reasonably centered, move forward
+                                    turn_right_timed(TURN_INCREMENT_DURATION * 0.6)
+                            else:
                                 move_forward_timed(MOVE_INCREMENT_DURATION * 0.7)
                         elif abs(offset_x) > ACCEPTABLE_X_OFFSET:
                             if offset_x > 0:
@@ -578,56 +620,100 @@ def navigate_to_aruco_marker(target_id, display=True):
                             move_backward_timed(0.2)
                         else:
                             move_forward_timed(0.1)  # Creep
-                        break  # Processed target, get new frame
 
+                        break  # Processed target, break from 'for ids' loop to get new frame after movement
+        # End of 'if ids is not None:'
+
+        # --- Target NOT Seen: Consider starting a non-blocking search turn ---
         if not target_seen_this_frame:
-            # speak("Can't see target marker.") # Too chatty for every frame
-            if found_initial_orientation_marker and target_id in FIELD_MARKERS_CLOCKWISE and last_seen_marker_id in FIELD_MARKERS_CLOCKWISE:
-                try:
-                    current_idx = FIELD_MARKERS_CLOCKWISE.index(last_seen_marker_id)
-                    target_idx = FIELD_MARKERS_CLOCKWISE.index(target_id)
-                    diff = (target_idx - current_idx + len(FIELD_MARKERS_CLOCKWISE)) % len(FIELD_MARKERS_CLOCKWISE)
-                    if diff == 1:
-                        speak(f"Target {target_id} might be right."); turn_right_timed(SEARCH_TURN_DURATION * 0.6)
-                    elif diff == len(FIELD_MARKERS_CLOCKWISE) - 1:
-                        speak(f"Target {target_id} might be left."); turn_left_timed(SEARCH_TURN_DURATION * 0.6)
-                    else:
-                        speak(f"Target {target_id} far. Wider turn."); turn_right_timed(SEARCH_TURN_DURATION)
-                except ValueError:
-                    turn_right_timed(SEARCH_TURN_DURATION)
-            else:
-                if attempts % 5 == 1:
-                    look_left_timed(0.6)
-                elif attempts % 5 == 2:
-                    look_right_timed(1.2); look_center_timed(0.1)
-                elif attempts % 5 == 0:
-                    speak("Searching for target marker by turning body."); turn_right_timed(SEARCH_TURN_DURATION)
+            turn_initiated_this_cycle = False
+            if not _movement_thread_active_flag.is_set() and \
+                    (current_frame_time - last_non_blocking_turn_command_time > NON_BLOCKING_TURN_COOLDOWN):
+
+                # speak("Target not seen. Considering a non-blocking turn.") # Optional debug
+
+                # 1. Try smart turning based on field markers
+                if found_initial_orientation_marker and target_id in FIELD_MARKERS_CLOCKWISE and last_seen_marker_id in FIELD_MARKERS_CLOCKWISE:
+                    try:
+                        current_idx = FIELD_MARKERS_CLOCKWISE.index(last_seen_marker_id)
+                        target_idx = FIELD_MARKERS_CLOCKWISE.index(target_id)
+                        diff = (target_idx - current_idx + len(FIELD_MARKERS_CLOCKWISE)) % len(FIELD_MARKERS_CLOCKWISE)
+
+                        if diff == 1:  # Target likely to robot's right
+                            speak(f"Target {target_id} might be right. Non-blocking right turn.")
+                            if start_non_blocking_timed_movement(turn_right_timed, SEARCH_TURN_DURATION * 0.6):
+                                turn_initiated_this_cycle = True
+                        elif diff == len(FIELD_MARKERS_CLOCKWISE) - 1:  # Target likely to robot's left
+                            speak(f"Target {target_id} might be left. Non-blocking left turn.")
+                            if start_non_blocking_timed_movement(turn_left_timed, SEARCH_TURN_DURATION * 0.6):
+                                turn_initiated_this_cycle = True
+                        else:  # Target further away
+                            speak(f"Target {target_id} far. Wider non-blocking right turn.")
+                            if start_non_blocking_timed_movement(turn_right_timed,
+                                                                 SEARCH_TURN_DURATION):  # Default wider turn
+                                turn_initiated_this_cycle = True
+                    except ValueError:  # Should not happen if logic is sound
+                        speak("Error in field marker logic. Defaulting to generic non-blocking turn.")
+                        if start_non_blocking_timed_movement(turn_right_timed, SEARCH_TURN_DURATION):
+                            turn_initiated_this_cycle = True
                 else:
-                    time.sleep(0.2)  # Short pause if not turning head or body
+                    # 2. Generic search pattern (replaces old head looks and some body turns)
+                    if attempts % 5 == 1:
+                        speak("Generic search: Non-blocking long right turn.")
+                        if start_non_blocking_timed_movement(turn_right_timed, 1.2):  # Your specified 1.2s duration
+                            turn_initiated_this_cycle = True
+                    elif attempts % 5 == 0:
+                        speak("Generic search: Non-blocking standard right body turn.")
+                        if start_non_blocking_timed_movement(turn_right_timed, SEARCH_TURN_DURATION):
+                            turn_initiated_this_cycle = True
+                    # For other attempts % 5 values (2, 3, 4), no turn is initiated here,
+                    # allowing the robot to just scan while stationary for a few cycles.
+
+                if turn_initiated_this_cycle:
+                    last_non_blocking_turn_command_time = current_frame_time  # Update timestamp
+
+            # else if _movement_thread_active_flag.is_set():
+            # print("DEBUG: Non-blocking turn in progress. Vision loop continues.") # Optional
+            # else:
+            # print(f"DEBUG: Cooldown active. Wait {NON_BLOCKING_TURN_COOLDOWN - (current_frame_time - last_non_blocking_turn_command_time):.2f}s for next turn.") # Optional
 
         if display:
             try:
                 cv2.imshow(window_name, frame)
             except Exception as e:
-                print(f"DEBUG: imshow failed in ArUco nav: {e}"); display = False
+                print(f"DEBUG: imshow failed in ArUco nav: {e}");
+                display = False
 
-        key = cv2.waitKey(1) & 0xFF
-        if key == ord('q'): speak("Navigation quit."); break
+        key = cv2.waitKey(1) & 0xFF  # Essential for OpenCV window and keeping loop responsive
+        if key == ord('q'): speak("Navigation quit by user."); break
         if display:
             try:
-                if cv2.getWindowProperty(window_name, cv2.WND_PROP_VISIBLE) < 1: break
-            except:
+                if cv2.getWindowProperty(window_name, cv2.WND_PROP_VISIBLE) < 1: break  # Window closed
+            except:  # Error checking window, assume closed
                 break
-        time.sleep(0.1)  # Pause between attempts
 
-    speak(f"Giving up on marker {target_id}.")
+        # Removed the general time.sleep(0.1) from here.
+        # Loop speed is now governed by frame acquisition, processing, waitKey(1), and turn cooldowns.
+
+    # --- End of while loop ---
+    speak(f"Giving up on marker {target_id} after {attempts} attempts.")
+
+    # --- Cleanup before exiting function ---
+    if _movement_thread_active_flag.is_set():
+        speak("Navigation function ending. Stopping any active search movement.")
+        stop_all_movement()  # Ensure motors are stopped
+        if movement_thread and movement_thread.is_alive():
+            # print("DEBUG: Waiting for active movement thread to complete its cycle...")
+            movement_thread.join(timeout=LONGEST_SEARCH_TURN_DURATION + 0.2)  # Wait for thread to finish
+        _movement_thread_active_flag.clear()  # Explicitly clear flag
+
     if display:
         try:
-            cv2.destroyWindow(window_name); cv2.waitKey(1)
+            cv2.destroyWindow(window_name);
+            cv2.waitKey(1)
         except Exception as e:
             print(f"DEBUG: destroyWindow '{window_name}' after timeout failed: {e}")
     return False
-
 
 # --- MAIN APPLICATION SCRIPT ---
 def run_robot_room_cleaner_demo():
