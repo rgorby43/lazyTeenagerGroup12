@@ -247,6 +247,7 @@ def find_markers(frame, target_id):
 
     if (target_id == 0):
         print("checking for 0")
+        maestro.setTarget(STRAIGHT, BACKWARD)
         maestro.setTarget(TILT, TILT_DOWN)
 
     if ids is not None:
