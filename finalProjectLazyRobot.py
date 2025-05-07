@@ -28,7 +28,7 @@ WAIST = 2
 
 # Maestro Server Speeds
 NEUTRAL = 6000
-FORWARD = 5300
+FORWARD = 5100
 BACKWARD = 7000
 SPIN_SPEED_RIGHT = 4900
 SPIN_SPEED_LEFT = 7000
@@ -317,7 +317,7 @@ def move_toward_marker(frame, marker_id):
         print(f"Marker size: {marker_percentage:.2f}% of frame.")
 
         # Check if the marker is big enough (i.e., we're close enough)
-        if marker_percentage >= 10:
+        if marker_percentage >= 11:
             if (marker_id == 0):
                 threading.Thread(target=speak, args=("I'm tired boss",), daemon=True).start()
                 print("At the Start")
