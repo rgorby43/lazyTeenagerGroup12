@@ -176,51 +176,39 @@ def init_realsense_camera():
         return False
 
 # In lazy_teen_robot_integrated.py
-# In lazy_teen_robot_integrated.py
-def init_face_detector(force_recreate=False): # Added force_recreate
+def init_face_detector():
     global face_detector_instance, WIDTH, HEIGHT, FPS, pipeline
-    print(f"INIT_FACE_DETECTOR: Entered. Force recreate: {force_recreate}")
+    print(f"INIT_FACE_DETECTOR: Entered.")
     print(f"INIT_FACE_DETECTOR: Global 'pipeline' received is type: {type(pipeline)}, id: {id(pipeline)}, value: {pipeline}")
-
-    if force_recreate and face_detector_instance is not None:
-        print(f"INIT_FACE_DETECTOR: Forcing recreation. Current instance id {id(face_detector_instance)} will be replaced.")
-        # Potentially call a cleanup/destructor if your RealSenseFaceDetector has one for resources other than pipeline
-        face_detector_instance = None # Nullify to force recreation
+    # This print below will tell us if the global face_detector_instance was None as expected
+    print(f"INIT_FACE_DETECTOR: Current face_detector_instance before 'if' check - type: {type(face_detector_instance)}, id: {id(face_detector_instance)}")
 
     if face_detector_instance is None:
-        if pipeline is None: # Critical check if we expect an external pipeline
-            print("INIT_FACE_DETECTOR: ERROR - Pipeline is None, cannot create RealSenseFaceDetector that expects an external pipeline.")
-            speak("My eyes are gone! Can't start the face detector without a camera pipeline.")
-            return False
         try:
             print("INIT_FACE_DETECTOR: face_detector_instance is None. Attempting to create new instance...")
+            # This assumes your faceRecognition.py __init__ ACCEPTS external_pipeline
             face_detector_instance = RealSenseFaceDetector(
                 width=WIDTH,
                 height=HEIGHT,
                 fps=FPS,
-                external_pipeline=pipeline # Pass the current global pipeline
+                external_pipeline=pipeline
             )
             print(f"INIT_FACE_DETECTOR: Instance CREATED. New face_detector_instance id: {id(face_detector_instance)}")
         except Exception as e:
             speak(f"INIT_FACE_DETECTOR: FAILED to create RealSenseFaceDetector instance: {e}")
-            print(f"INIT_FACE_DETECTOR: Error during creation. face_detector_instance might be partially set or None.")
-            face_detector_instance = None # Ensure it's None on failure
+            print(f"INIT_FACE_DETECTOR: Error during creation. face_detector_instance id is now: {id(face_detector_instance)}")
             return False
     else:
-        print(f"INIT_FACE_DETECTOR: Instance already exists. Using existing id: {id(face_detector_instance)}.")
-        # Here, you could add logic to update the existing instance's pipeline if it had such a method,
-        # but recreating is simpler and cleaner given the current structure.
-        # If not recreating, ensure its current pipeline is the same as the global one.
-        if face_detector_instance.pipeline is not pipeline: # Check if its internal pipeline matches the global one
-            print(f"INIT_FACE_DETECTOR: WARNING - Existing instance has a different pipeline object (id {id(face_detector_instance.pipeline)}) than current global pipeline (id {id(pipeline)}). Consider force_recreate=True.")
-            # This scenario might lead to issues if the old pipeline it holds is stale.
+        # This case should ideally not happen if we want a fresh init each time or controlled re-init
+        print(f"INIT_FACE_DETECTOR: Instance already exists. Using existing id: {id(face_detector_instance)}. This might be unexpected if a fresh init was desired.")
 
-    if face_detector_instance is None:
+    if face_detector_instance is None: # Should only be true if creation failed AND face_detector_instance wasn't assigned
         print("INIT_FACE_DETECTOR: Exiting, face_detector_instance is STILL None after attempt. This is a problem.")
         return False
 
     print(f"INIT_FACE_DETECTOR: Exiting successfully. Final face_detector_instance id: {id(face_detector_instance)}")
     return True
+
 
 def init_object_recognizer():
     global orb_detector, bf_matcher, trained_objects_data
@@ -372,8 +360,7 @@ def reset_robot_to_neutral_stance():
     set_servo_target(SERVOS["right_arm_actuator"], NEUTRAL)
     # Add other servos (waist, shoulder) if they need resetting
     print("Robot servos set to neutral.")
-
-# PIPELine SHUTDOWN
+# PIPELINE SHUTDOWN
 
 def shutdown_realsense_camera():
     global pipeline
