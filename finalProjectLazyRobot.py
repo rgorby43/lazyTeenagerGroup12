@@ -33,8 +33,9 @@ BACKWARD = 7000
 SPIN_SPEED_RIGHT = 5000
 SPIN_SPEED_LEFT = 6900
 PAN_CENTER = 6000
-TILT_CENTER = 4600
+TILT_CENTER = 4500
 TILT_UP = 7000
+TILT_DOWN = 5000
 ARM_DOWN = 4350
 ARM_UP = 8000
 
@@ -46,6 +47,7 @@ maestro.setTarget(PAN, PAN_CENTER)
 maestro.setTarget(TILT, TILT_CENTER)
 maestro.setTarget(RIGHT_ARM, ARM_DOWN)
 maestro.setTarget(WAIST, NEUTRAL)
+
 
 # ArUco marker setup, loads the library, sets default viewing info, assigns 3D space values and then tells
 # the camera there is no distortion
@@ -245,6 +247,7 @@ def find_markers(frame, target_id):
 
     if (target_id == 0):
         print("checking for 0")
+        maestro.setTarget(TILT, TILT_DOWN)
 
     if ids is not None:
         ids = ids.flatten()
