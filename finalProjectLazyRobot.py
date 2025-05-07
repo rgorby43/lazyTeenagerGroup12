@@ -1,3 +1,6 @@
+import sys
+sys.path.append('/home/group12/')
+
 import cv2
 import numpy as np
 import time
@@ -76,7 +79,7 @@ def identifier_setup():
     global trained_objects, orb, bf
 
     # Load trained objects
-    with open("trainedObjects.pkl", "rb") as f:
+    with open("/home/group12/realsense_calibration_data.npz", "rb") as f:
         raw_objects = pickle.load(f)
 
     trained_objects = {}

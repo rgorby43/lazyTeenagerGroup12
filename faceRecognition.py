@@ -1,4 +1,6 @@
 # face_detector_module.py
+import sys
+sys.path.append('/home/group12/')
 
 import cv2
 import numpy as np
