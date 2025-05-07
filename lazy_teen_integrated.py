@@ -47,7 +47,7 @@ CALIBRATION_FILE = '/home/group12/realsense_calibration_data.npz'
 MARKER_ID_CENTER = 0
 MAESTRO_PORT = '/dev/ttyACM0'
 SERVOS = {"wheels_both": 0, "wheels_opposite": 1, "waist": 2, "head_up_down": 3, "head_side_to_side": 4,
-          "right_arm_shoulder": 5, "right_arm_shoulder": 6, "right_arm_actuator": 7}
+          "right_arm_shoulder": 5, "right_arm_elbow": 6, "right_arm_actuator": 7}
 NEUTRAL = 6000
 OBJECT_CONSISTENCY_DURATION = 1.0  # NEW: Seconds an object must be consistently detected
 FACE_DETECTION_DURATION = 1
