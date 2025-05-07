@@ -384,58 +384,127 @@ def wait_for_human_face_trigger(display=True):
         speak("No face? Fine, I'm going back to ignoring everything.")
         return False
 
-def identify_object_in_view(timeout_sec=15, display=True):  # [cite: 21, 22]
+
+def identify_object_in_view(timeout_sec=15, display=True):  #
     global pipeline, orb_detector, bf_matcher, trained_objects_data
     speak("Alright, show me the junk I'm supposed to clean. Make it quick.")
+    print("DEBUG: Entered identify_object_in_view")  # Confirm entry
 
     window_name = "Object Recognition"
-    if display: cv2.namedWindow(window_name, cv2.WINDOW_AUTOSIZE)
+    if display:
+        print("DEBUG: Creating OpenCV window: ", window_name)
+        cv2.namedWindow(window_name, cv2.WINDOW_AUTOSIZE)
 
     start_time = time.time()
     best_obj_name, best_obj_id = None, None
+    loop_iteration = 0  # Add a counter
 
     while time.time() - start_time < timeout_sec:
-        frames = pipeline.wait_for_frames(timeout_ms=1000)
-        if not frames: continue
+        loop_iteration += 1
+        print(f"DEBUG: Loop iteration {loop_iteration}, Time elapsed: {time.time() - start_time:.2f}s")
+
+        print("DEBUG: Attempting to get frames from RealSense pipeline...")
+        frames = pipeline.wait_for_frames(timeout_ms=1000)  # Increased timeout slightly for debugging
+
+        if not frames:
+            print("DEBUG: No frames received from pipeline this iteration. Continuing...")
+            # Add a small sleep to prevent a tight loop if frames are consistently not available
+            time.sleep(0.1)
+            if cv2.waitKey(1) & 0xFF == ord('q'):  # Allow quitting even if no frames
+                print("DEBUG: 'q' pressed while waiting for frames.")
+                break
+            continue
+        print("DEBUG: Frames received.")
+
         color_frame = frames.get_color_frame()
-        if not color_frame: continue
+        if not color_frame:
+            print("DEBUG: No color_frame available this iteration. Continuing...")
+            if cv2.waitKey(1) & 0xFF == ord('q'):  # Allow quitting
+                print("DEBUG: 'q' pressed while waiting for color_frame.")
+                break
+            continue
+        print("DEBUG: Color frame obtained.")
 
         frame = np.asanyarray(color_frame.get_data())
+        print(f"DEBUG: Frame converted to numpy array, shape: {frame.shape}")
         gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        print("DEBUG: Frame converted to grayscale.")
+
         kp_scene, des_scene = orb_detector.detectAndCompute(gray_frame, None)
+        if des_scene is None:
+            print("DEBUG: No descriptors found in scene.")
+        else:
+            print(f"DEBUG: Scene descriptors computed, count: {len(des_scene)}")
 
         if des_scene is None or len(des_scene) < 2:  # Need at least 2 for knnMatch k=2
             if display:
                 cv2.putText(frame, "Detecting...", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 165, 255), 2)
                 cv2.imshow(window_name, frame)
-            if cv2.waitKey(1) & 0xFF == ord('q'): break
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                print("DEBUG: 'q' pressed, no scene descriptors.")
+                break
+            print("DEBUG: Continuing due to insufficient scene descriptors.")
             continue
 
         max_good_matches = 0
+        print("DEBUG: Starting to iterate through trained objects_data.")
+        if not trained_objects_data:
+            print("DEBUG: ERROR - trained_objects_data is empty or None!")
+            # Handle this case, perhaps by breaking or returning
+            break
 
-        for obj_data in trained_objects_data:
-            obj_name_candidate = obj_data['name']
-            obj_id_candidate = obj_data['id']  # This ID is the ArUco marker ID
+        for obj_data_idx, obj_data in enumerate(trained_objects_data):
+            obj_name_candidate = obj_data.get('name', 'Unknown')  # Use .get for safety
+            obj_id_candidate = obj_data.get('id', -1)
+            print(
+                f"DEBUG: Comparing with trained object #{obj_data_idx}: {obj_name_candidate} (ID: {obj_id_candidate})")
             current_object_total_good_matches = 0
 
-            for des_train in obj_data['descriptors']:
-                if des_train is None or len(des_train) < 2: continue
-                # Ensure des_train is CV_8U, ORB descriptors are binary
-                if des_train.dtype != np.uint8: des_train = np.uint8(des_train)
-                if des_scene.dtype != np.uint8: des_scene = np.uint8(des_scene)
+            # Ensure 'descriptors' key exists and is iterable
+            trained_descriptors = obj_data.get('descriptors')
+            if trained_descriptors is None:
+                print(f"DEBUG: WARNING - No 'descriptors' key for trained object: {obj_name_candidate}")
+                continue
 
-                matches = bf_matcher.knnMatch(des_train, des_scene, k=2)
+            for des_train_idx, des_train in enumerate(trained_descriptors):
+                # print(f"DEBUG:  Comparing with trained descriptor set #{des_train_idx} for {obj_name_candidate}")
+                if des_train is None or len(des_train) < 2:
+                    # print(f"DEBUG:   Skipping trained descriptor set #{des_train_idx} for {obj_name_candidate} (None or too short)")
+                    continue
+                if des_train.dtype != np.uint8: des_train = np.uint8(des_train)
+                if des_scene.dtype != np.uint8:
+                    des_scene_uint8 = np.uint8(des_scene)  # Avoid modifying des_scene in loop
+                else:
+                    des_scene_uint8 = des_scene
+
+                # print(f"DEBUG:   Attempting knnMatch for {obj_name_candidate}, trained_des_len: {len(des_train)}, scene_des_len: {len(des_scene_uint8)}")
+                try:
+                    matches = bf_matcher.knnMatch(des_train, des_scene_uint8, k=2)
+                except cv2.error as e:
+                    print(f"DEBUG: cv2.error during knnMatch for {obj_name_candidate}: {e}")
+                    print(f"DEBUG: des_train.shape: {des_train.shape}, des_train.dtype: {des_train.dtype}")
+                    print(
+                        f"DEBUG: des_scene_uint8.shape: {des_scene_uint8.shape}, des_scene_uint8.dtype: {des_scene_uint8.dtype}")
+                    continue  # Skip this descriptor set
+
+                # print(f"DEBUG:   knnMatch completed for {obj_name_candidate}. Found {len(matches)} raw matches.")
 
                 good_matches_count_this_set = 0
-                for m, n in matches:
-                    if m.distance < RATIO_THRESH * n.distance and m.distance < DIST_THRESH:  # Adjusted Lowe's + absolute dist
-                        good_matches_count_this_set += 1
+                for m_idx, match_pair in enumerate(matches):
+                    if len(match_pair) == 2:  # Ensure k=2 matches were returned
+                        m, n = match_pair
+                        if m.distance < RATIO_THRESH * n.distance and m.distance < DIST_THRESH:
+                            good_matches_count_this_set += 1
+                    # else:
+                    # print(f"DEBUG:    Skipping match {m_idx} for {obj_name_candidate}, not a pair (len: {len(match_pair)})")
                 current_object_total_good_matches += good_matches_count_this_set
+                # print(f"DEBUG:   Good matches for this descriptor set ({obj_name_candidate}): {good_matches_count_this_set}, Total for object: {current_object_total_good_matches}")
 
             if current_object_total_good_matches > max_good_matches:
                 max_good_matches = current_object_total_good_matches
                 best_obj_name = obj_name_candidate
                 best_obj_id = obj_id_candidate
+                print(f"DEBUG: New best object potentially: {best_obj_name} with {max_good_matches} matches.")
 
         display_label = "Detecting..."
         label_color = (0, 165, 255)  # Orange
@@ -443,23 +512,36 @@ def identify_object_in_view(timeout_sec=15, display=True):  # [cite: 21, 22]
         if best_obj_name and max_good_matches >= COUNT_THRESH:
             display_label = f"FOUND: {best_obj_name} (ID:{best_obj_id}) Matches: {max_good_matches}"
             label_color = (0, 255, 0)  # Green
+            print(f"DEBUG: Object identified: {best_obj_name} with ID {best_obj_id}, matches: {max_good_matches}")
             if display:
                 cv2.putText(frame, display_label, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, label_color, 2)
                 cv2.imshow(window_name, frame)
-                cv2.waitKey(1)  # Show briefly
+                cv2.waitKey(1)
             speak(f"Fine. That's the {best_obj_name}. Guess I will put it in box #{best_obj_id}.")
-            if display: cv2.destroyWindow(window_name)
+            if display:
+                print("DEBUG: Destroying OpenCV window.")
+                cv2.destroyWindow(window_name)
             return best_obj_name, best_obj_id
         elif best_obj_name:
             display_label = f"Maybe: {best_obj_name} ({max_good_matches})"
+            print(f"DEBUG: Potentially {best_obj_name}, but matches ({max_good_matches}) < threshold ({COUNT_THRESH}).")
 
         if display:
             cv2.putText(frame, display_label, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, label_color, 2)
+            # print("DEBUG: Displaying frame in OpenCV window.")
             cv2.imshow(window_name, frame)
-        if cv2.waitKey(1) & 0xFF == ord('q'): break
+
+        key = cv2.waitKey(1)  # Crucial for window updates and input
+        if key & 0xFF == ord('q'):
+            print("DEBUG: 'q' pressed by user. Exiting object identification.")
+            break
+        # print(f"DEBUG: cv2.waitKey(1) returned {key}")
 
     speak("Couldn't recognize anything clearly. Or maybe I just zoned out.")
-    if display: cv2.destroyWindow(window_name)
+    print("DEBUG: Timeout reached or loop broken. No object confidently identified.")
+    if display:
+        print("DEBUG: Destroying OpenCV window after timeout/quit.")
+        cv2.destroyWindow(window_name)
     return None, None
 
 
