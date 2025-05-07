@@ -74,7 +74,7 @@ _is_continuous_turning_flag = threading.Event()
 
 # --- HELPER: TEXT-TO-SPEECH ---
 def speak(text):
-    print(f"\n🤖 LAZY TEEN SAYS: {text}\n")
+    print(f"\n🤖 LAZY ROBOT SAYS: {text}\n")
     subprocess.run({"espeak": text})
 
 # --- INITIALIZATION FUNCTIONS (largely unchanged, but init_face_detector passes pipeline) ---
@@ -798,7 +798,7 @@ def run_robot_room_cleaner_demo():
         cv2.waitKey(50)
 
         if object_name and target_aruco_id_for_drop is not None:
-            perform_arm_raise_for_ritual()
+            #perform_arm_raise_for_ritual()
             # navigate_to_aruco_marker will create its own window.
             if navigate_to_aruco_marker(target_aruco_id_for_drop, display=True):
                 perform_ring_drop()
