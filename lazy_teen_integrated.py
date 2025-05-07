@@ -10,6 +10,7 @@ import time
 import pyrealsense2 as rs
 import cv2.aruco as aruco
 import threading  # <<< --- ADD THIS LINE HERE ---
+import subprocess
 
 # Assuming face_detector_module.py is in the Python path (e.g. /home/group12/)
 # or in the same directory
@@ -74,7 +75,7 @@ _is_continuous_turning_flag = threading.Event()
 # --- HELPER: TEXT-TO-SPEECH ---
 def speak(text):
     print(f"\n🤖 LAZY TEEN SAYS: {text}\n")
-
+    subprocess.run({"espeak": text})
 
 # --- INITIALIZATION FUNCTIONS (largely unchanged, but init_face_detector passes pipeline) ---
 
