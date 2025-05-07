@@ -33,7 +33,7 @@ BACKWARD = 7000
 SPIN_SPEED_RIGHT = 4900
 SPIN_SPEED_LEFT = 6900
 PAN_CENTER = 6000
-TILT_CENTER = 7000
+TILT_CENTER = 6700
 TILT_UP = 8000
 TILT_DOWN = 3000
 ARM_DOWN = 4350
@@ -317,7 +317,7 @@ def move_toward_marker(frame, marker_id):
         print(f"Marker size: {marker_percentage:.2f}% of frame.")
 
         # Check if the marker is big enough (i.e., we're close enough)
-        if marker_percentage >= 11:
+        if marker_percentage >= 12:
             if (marker_id == 0):
                 threading.Thread(target=speak, args=("I'm tired boss",), daemon=True).start()
                 print("At the Start")
