@@ -47,7 +47,7 @@ CALIBRATION_FILE = '/home/group12/realsense_calibration_data.npz'
 MARKER_ID_CENTER = 0
 MAESTRO_PORT = '/dev/ttyACM0'
 SERVOS = {"wheels_both": 0, "wheels_opposite": 1, "waist": 2, "head_up_down": 3, "head_side_to_side": 4,
-          "right_arm_shoulder": 5, "right_arm_elbow": 6, "right_arm_actuator": 7}
+          "right_arm_shoulder": 5, "right_arm_shoulder": 6, "right_arm_actuator": 7}
 NEUTRAL = 6000
 OBJECT_CONSISTENCY_DURATION = 1.0  # NEW: Seconds an object must be consistently detected
 FACE_DETECTION_DURATION = 1
@@ -204,52 +204,66 @@ def set_servo_target(channel, target):
     # else: print(f"Debug: Servo {channel} to {target} (Maestro not connected)")
 
 
-def move_forward_timed(duration, speed_pulse=4500): speak("Moving forward."); set_servo_target(SERVOS["wheels_both"],
-                                                                                               speed_pulse); set_servo_target(
+def move_forward_timed(duration, speed_pulse=4500):
+    speak("Moving forward.");
+    set_servo_target(SERVOS["wheels_both"],
+    speed_pulse); set_servo_target(
     SERVOS["wheels_opposite"], NEUTRAL); time.sleep(duration); stop_all_movement()
 
 
-def move_backward_timed(duration, speed_pulse=7500): speak("Backing up."); set_servo_target(SERVOS["wheels_both"],
-                                                                                            speed_pulse); set_servo_target(
+def move_backward_timed(duration, speed_pulse=7500):
+    speak("Backing up.");
+    set_servo_target(SERVOS["wheels_both"],
+    speed_pulse); set_servo_target(
     SERVOS["wheels_opposite"], NEUTRAL); time.sleep(duration); stop_all_movement()
 
 
-def turn_left_timed(duration, turn_pulse=7000): speak("Turning left."); set_servo_target(SERVOS["wheels_opposite"],
-                                                                                         turn_pulse); set_servo_target(
+def turn_left_timed(duration, turn_pulse=7000):
+    speak("Turning left.");
+    set_servo_target(SERVOS["wheels_opposite"],
+    turn_pulse); set_servo_target(
     SERVOS["wheels_both"], NEUTRAL); time.sleep(duration); stop_all_movement()
 
 
-def turn_right_timed(duration, turn_pulse=5000): speak("Turning right."); set_servo_target(SERVOS["wheels_opposite"],
-                                                                                           turn_pulse); set_servo_target(
+def turn_right_timed(duration, turn_pulse=5000):
+    speak("Turning right.");
+    set_servo_target(SERVOS["wheels_opposite"],
+    turn_pulse); set_servo_target(
     SERVOS["wheels_both"], NEUTRAL); time.sleep(duration); stop_all_movement()
 
 
-def stop_all_movement(): set_servo_target(SERVOS["wheels_both"], NEUTRAL); set_servo_target(SERVOS["wheels_opposite"],
-                                                                                            NEUTRAL)
+def stop_all_movement():
+    set_servo_target(SERVOS["wheels_both"], NEUTRAL);
+    set_servo_target(SERVOS["wheels_opposite"],NEUTRAL)
 
 
-def look_left_timed(duration=0.5, look_target=8000): set_servo_target(SERVOS["head_side_to_side"],
-                                                                      look_target); time.sleep(duration)
+def look_left_timed(duration=0.5, look_target=8000):
+    set_servo_target(SERVOS["head_side_to_side"],ook_target);
+    time.sleep(duration)
 
 
-def look_right_timed(duration=0.5, look_target=4000): set_servo_target(SERVOS["head_side_to_side"],
-                                                                       look_target); time.sleep(duration)
+def look_right_timed(duration=0.5, look_target=4000):
+    set_servo_target(SERVOS["head_side_to_side"],look_target);
+    time.sleep(duration)
 
 
-def look_center_timed(duration=0.3): set_servo_target(SERVOS["head_side_to_side"], NEUTRAL); time.sleep(duration)
+def look_center_timed(duration=0.3):
+    set_servo_target(SERVOS["head_side_to_side"], NEUTRAL);
+    time.sleep(duration)
 
 
-def perform_arm_raise_for_ritual(): speak("Arm's up."); set_servo_target(SERVOS["right_arm_elbow"], 5000); time.sleep(
+def perform_arm_raise_for_ritual():
+    speak("Arm's up.");
+    set_servo_target(SERVOS["right_arm_shoulder"], 5000); time.sleep(
     1.5); print(">>> USER: Place 'ring'. Waiting 5s. <<<"); time.sleep(5)
 
-
 def perform_ring_drop(): speak("Dropping this."); set_servo_target(SERVOS["right_arm_actuator"], 7000); time.sleep(
-    1); set_servo_target(SERVOS["right_arm_elbow"], NEUTRAL); time.sleep(1); set_servo_target(
+    1); set_servo_target(SERVOS["right_arm_shoulder"], NEUTRAL); time.sleep(1); set_servo_target(
     SERVOS["right_arm_actuator"], NEUTRAL); speak("There. Not in the box. Oh well.")
 
 
 def reset_robot_to_neutral_stance(): speak("Resetting."); stop_all_movement(); look_center_timed(0.5); set_servo_target(
-    SERVOS["right_arm_elbow"], NEUTRAL); set_servo_target(SERVOS["right_arm_actuator"], NEUTRAL); print(
+    SERVOS["right_arm_shoulder"], NEUTRAL); set_servo_target(SERVOS["right_arm_actuator"], NEUTRAL); print(
     "Robot servos neutral.")
 
 
