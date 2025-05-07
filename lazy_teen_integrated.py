@@ -394,6 +394,7 @@ def identify_object_in_view(timeout_sec=15, display=True):  #
     if display:
         print("DEBUG: Creating OpenCV window: ", window_name)
         cv2.namedWindow(window_name, cv2.WINDOW_AUTOSIZE)
+        print(f"DEBUG: OpenCV window '{window_name}' call returned.") # <-- ADD THIS LINE
 
     start_time = time.time()
     best_obj_name, best_obj_id = None, None
