@@ -79,7 +79,7 @@ def identifier_setup():
     global trained_objects, orb, bf
 
     # Load trained objects
-    with open("/home/robot/Desktop/1CompVis/ComputerVision/FinalProject/trainedObjects.pkl", "rb") as f:
+    with open("trainedObjects.pkl", "rb") as f:
         raw_objects = pickle.load(f)
 
     trained_objects = {}
